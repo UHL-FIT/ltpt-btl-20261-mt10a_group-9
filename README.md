@@ -1,5 +1,9 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/-QmD8cHQ)
+<<<<<<< HEAD
 [![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-2e0aaae1b6195c2367325f4f02e2d04e9abb55f0b24a779b69b11b9e10269abc.svg)](https://classroom.github.com/online_ide?assignment_repo_id=23867042&assignment_repo_type=AssignmentRepo)
+=======
+[![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-2e0aaae1b6195c2367325f4f02e2d04e9abb55f0b24a779b69b11b9e10269abc.svg)](https://classroom.github.com/online_ide?assignment_repo_id=23882303&assignment_repo_type=AssignmentRepo)
+>>>>>>> 9a2504c8a8743673643ddf3220fb4352edd52848
 # SmartAttend - Phần Mềm Quản Lý Điểm Danh Sinh Viên
 
 SmartAttend là một ứng dụng Python chuyên dụng giúp giảng viên/người dùng quản lý thông tin sinh viên, điểm danh theo tuần, theo dõi số lần nộp bài tập, vi phạm và đưa ra các cảnh báo cấm thi một cách trực quan, hiện đại.
