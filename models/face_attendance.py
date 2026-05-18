@@ -1,30 +1,11 @@
-"""Model: quản lý dữ liệu chấm công nhận diện khuôn mặt.
-
-Hiện tại triển khai theo kiểu lưu CSV để:
-- UI có dữ liệu để test ngay
-- Sau này thay thế phần nhận diện bằng OpenCV/face_recognition
-
-Data files (trong thư mục data/):
-- face_students.csv
-- face_logs.csv
-"""
-
-from __future__ import annotations
-
 import os
 import sys
-
 from datetime import datetime, date
-
 from typing import Dict, Optional, Tuple
-
-
 import pandas as pd
-
 from utils.logger import setup_logger
 
 logger = setup_logger("face_attendance")
-
 
 def _get_base_dir() -> str:
     # Khi chạy source trực tiếp: base_dir là repo root (nơi models/ nằm trong).
@@ -33,14 +14,13 @@ def _get_base_dir() -> str:
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(__file__))
 
-
 BASE_DIR = _get_base_dir()
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 FACE_STUDENTS_CSV = os.path.join(DATA_DIR, "face_students.csv")
 FACE_LOGS_CSV = os.path.join(DATA_DIR, "face_logs.csv")
 
-
+# Tạo dữ liệu mẫu nếu chưa có file csv
 def _ensure_csv_files() -> None:
     os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -74,7 +54,7 @@ def _ensure_csv_files() -> None:
         )
         df.to_csv(FACE_LOGS_CSV, index=False, encoding="utf-8-sig")
 
-
+# Đọc danh sách sinh viên từ file csv
 def load_students() -> pd.DataFrame:
     _ensure_csv_files()
     df = pd.read_csv(FACE_STUDENTS_CSV, dtype=str, encoding="utf-8-sig")
@@ -87,7 +67,7 @@ def load_students() -> pd.DataFrame:
     df["msv"] = df["msv"].astype(str).str.strip().str.upper()
     return df
 
-
+# Thêm sinh viên 
 def add_student(student: Dict[str, str]) -> Tuple[bool, str]:
     """student: {msv, ho_ten, lop, sdt, face_path}"""
     _ensure_csv_files()
@@ -101,9 +81,10 @@ def add_student(student: Dict[str, str]) -> Tuple[bool, str]:
 
     if not msv:
         return False, "MSV không được để trống"
+    
     if not ho_ten:
         return False, "Họ tên không được để trống"
-
+    
     if (df["msv"] == msv).any():
         return False, "MSV đã tồn tại"
 
@@ -120,7 +101,7 @@ def add_student(student: Dict[str, str]) -> Tuple[bool, str]:
     df.to_csv(FACE_STUDENTS_CSV, index=False, encoding="utf-8-sig")
     return True, "Đã thêm sinh viên" 
 
-
+# Cập nhật thông itn sinh viên
 def update_student(msv: str, update: Dict[str, str]) -> Tuple[bool, str]:
     _ensure_csv_files()
     df = load_students()
@@ -137,7 +118,7 @@ def update_student(msv: str, update: Dict[str, str]) -> Tuple[bool, str]:
     df.to_csv(FACE_STUDENTS_CSV, index=False, encoding="utf-8-sig")
     return True, "Đã cập nhật"
 
-
+# Xóa sinh viên
 def delete_student(msv: str) -> Tuple[bool, str]:
     _ensure_csv_files()
     df = load_students()
@@ -148,13 +129,31 @@ def delete_student(msv: str) -> Tuple[bool, str]:
     df.to_csv(FACE_STUDENTS_CSV, index=False, encoding="utf-8-sig")
     return True, "Đã xoá"
 
-
 def register_face(msv: str, face_path: str = "") -> Tuple[bool, str]:
-    """Placeholder: nhận face_path; sau này thêm thêm ảnh/embedding."""
+    """Liên kết ảnh khuôn mặt với sinh viên theo MSV.
+
+    Args:
+        msv: Mã sinh viên.
+        face_path: Đường dẫn ảnh khuôn mặt (vd: dataset/SV001.jpg)
+
+    Returns:
+        (ok, msg)
+    """
+    msv = str(msv).strip().upper()
+    face_path = str(face_path).strip()
+
+    if not msv:
+        return False, "MSV không hợp lệ"
+    if not face_path:
+        return False, "face_path không hợp lệ"
+
+    if not os.path.exists(face_path):
+        return False, f"Không tìm thấy ảnh: {face_path}"
+
     ok, msg = update_student(msv, {"face_path": face_path})
     return ok, msg
 
-
+# Thêm dòng log vào face_log.csv
 def do_attendance(msv: str, status: str = "OK", note: str = "") -> Tuple[bool, str]:
     _ensure_csv_files()
     df_students = load_students()

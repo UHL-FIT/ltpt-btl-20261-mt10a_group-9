@@ -1,10 +1,6 @@
-"""Logger utility."""
-
 import logging
 import os
 import sys
-from typing import Optional
-
 
 def setup_logger(name: str = "app") -> logging.Logger:
     logger = logging.getLogger(name)

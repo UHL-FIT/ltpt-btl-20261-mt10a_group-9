@@ -1,4 +1,3 @@
-from __future__ import annotations
 import customtkinter as ctk
 from tkinter import ttk
 from typing import Dict
@@ -49,20 +48,100 @@ def create_main_window() -> tuple[ctk.CTk, Dict[str, object]]:
             frame.place_forget()
         pages[page].place(in_=content, x=0, y=0, relwidth=1, relheight=1)
 
-    # ---------------- Attendance Page ----------------
+
+    # ---------------- Attendance Page (CustomTkinter layout) ----------------
     att = pages["attendance"]
-    att.grid_columnconfigure(0, weight=1)
-    att.grid_columnconfigure(1, weight=1)
 
-    card_left = ctk.CTkFrame(att, corner_radius=12)
-    card_left.grid(row=0, column=0, padx=14, pady=14, sticky="nsew")
-    card_right = ctk.CTkFrame(att, corner_radius=12)
-    card_right.grid(row=0, column=1, padx=14, pady=14, sticky="nsew")
+    # 2 cột chính: Left ~70% / Right ~30%
+    att.grid_columnconfigure(0, weight=7)
+    att.grid_columnconfigure(1, weight=3)
+    att.grid_rowconfigure(0, weight=1)
 
-    ctk.CTkLabel(card_left, text="Chấm công", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(18, 8))
+    # Frame tổng (chứa 2 cột)
+    left_frame = ctk.CTkFrame(att, corner_radius=12)
+    left_frame.grid(row=0, column=0, padx=14, pady=14, sticky="nsew")
+
+    right_frame = ctk.CTkFrame(att, corner_radius=12)
+    right_frame.grid(row=0, column=1, padx=14, pady=14, sticky="nsew")
+
+    # -------- Left Frame --------
+    left_frame.grid_rowconfigure(1, weight=1)
+    left_frame.grid_columnconfigure(0, weight=1)
 
     ui: Dict[str, object] = {"root": root}
 
+    # Button Chấm công
+    ui["btn_start_attendance"] = ctk.CTkButton(
+        left_frame,
+        text="Chấm công",
+        height=52,
+        font=ctk.CTkFont(size=22, weight="bold"),
+    )
+    ui["btn_start_attendance"].grid(row=0, column=0, padx=16, pady=(16, 10), sticky="ew")
+
+    # Vùng mở cam chấm công
+    ui["frame_cam_attendance"] = ctk.CTkFrame(
+        left_frame,
+        corner_radius=12,
+        fg_color="#1e1e1e",
+    )
+    ui["frame_cam_attendance"].grid(row=1, column=0, padx=16, pady=(0, 16), sticky="nsew")
+    ui["frame_cam_attendance"].grid_rowconfigure(0, weight=1)
+    ui["frame_cam_attendance"].grid_columnconfigure(0, weight=1)
+
+    ui["label_cam_state"] = ctk.CTkLabel(
+        ui["frame_cam_attendance"],
+        text="Camera đang tắt - Nhấn nút để chấm công",
+        font=ctk.CTkFont(size=16, weight="bold"),
+        text_color="#d0d0d0",
+        fg_color="#1e1e1e",
+        justify="center",
+        wraplength=420,
+    )
+    ui["label_cam_state"].grid(row=0, column=0, padx=12, pady=12, sticky="nsew")
+
+    # -------- Right side (Info) --------
+    right_frame.grid_rowconfigure(0, weight=1)
+    right_frame.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(right_frame, text="Thông tin chấm công", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(18, 8))
+
+    # Vùng hiển thị thông tin chấm công
+    ui["frame_info_display"] = ctk.CTkFrame(
+        right_frame,
+        corner_radius=12,
+        fg_color="#333333",
+    )
+    ui["frame_info_display"].pack(fill="both", expand=True, padx=14, pady=14)
+
+    items = [
+        ("Mã SV", "---", "lbl_msv"),
+        ("Họ tên", "---", "lbl_hoten"),
+        ("Lớp", "---", "lbl_lop"),
+        ("SĐT", "---", "lbl_sdt"),
+        ("Thời gian", "---", "lbl_thoigian"),
+    ]
+
+    for r, (title, value, key) in enumerate(items):
+        grid_r = r + 1
+        ctk.CTkLabel(
+            ui["frame_info_display"],
+            text=f"{title}:",
+            anchor="w",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#eaeaea",
+        ).grid(row=grid_r, column=0, sticky="w", padx=(18, 10), pady=(14 if r == 0 else 8, 0))
+
+        ui[key] = ctk.CTkLabel(
+            ui["frame_info_display"],
+            text=value,
+            anchor="w",
+            font=ctk.CTkFont(size=14),
+            text_color="#ffffff",
+        )
+        ui[key].grid(row=grid_r, column=1, sticky="w", padx=(0, 18), pady=(14 if r == 0 else 8, 0))
+
+    # Sidebar buttons (để các page khác hoạt động)
     ui["btn_nav_att"] = ctk.CTkButton(sidebar, text="Chấm công", command=lambda: show_page("attendance"))
     ui["btn_nav_reg"] = ctk.CTkButton(sidebar, text="Đăng ký", command=lambda: show_page("register"))
     ui["btn_nav_stats"] = ctk.CTkButton(sidebar, text="Thống kê", command=lambda: show_page("stats"))
@@ -72,39 +151,6 @@ def create_main_window() -> tuple[ctk.CTk, Dict[str, object]]:
     ui["btn_nav_reg"].pack(pady=8, padx=14)
     ui["btn_nav_stats"].pack(pady=8, padx=14)
     ui["btn_nav_history"].pack(pady=8, padx=14)
-
-    # Attendance controls
-    form = ctk.CTkFrame(card_left, corner_radius=12)
-    form.pack(fill="both", expand=True, padx=14, pady=14)
-
-    ctk.CTkLabel(form, text="MSV:").grid(row=0, column=0, sticky="w", padx=10, pady=8)
-    ui["ent_att_msv"] = ctk.CTkEntry(form, width=260)
-    ui["ent_att_msv"].grid(row=0, column=1, padx=10, pady=8)
-
-    ui["btn_start_recog"] = ctk.CTkButton(form, text="Bắt đầu nhận diện (demo)")
-    ui["btn_start_recog"].grid(row=1, column=0, columnspan=2, padx=10, pady=(10, 6), sticky="ew")
-
-    ui["btn_mark_attendance"] = ctk.CTkButton(form, text="Chấm công", fg_color="#1CB57A")
-    ui["btn_mark_attendance"].grid(row=2, column=0, columnspan=2, padx=10, pady=8, sticky="ew")
-
-    ui["lbl_att_status"] = ctk.CTkLabel(form, text="Trạng thái: sẵn sàng", anchor="w")
-    ui["lbl_att_status"].grid(row=3, column=0, columnspan=2, padx=10, pady=(12, 0), sticky="w")
-
-    # Right side: recent logs
-    ctk.CTkLabel(card_right, text="Gần đây", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(18, 8), padx=14, anchor="w")
-
-    tree_frame = ctk.CTkFrame(card_right, corner_radius=10)
-    tree_frame.pack(fill="both", expand=True, padx=14, pady=14)
-
-    cols = ["log_id", "msv", "time", "status"]
-    tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=14)
-    for c in cols:
-        tree.heading(c, text=c)
-        tree.column(c, width=120 if c != "time" else 220)
-    tree.pack(fill="both", expand=True)
-
-    ui["tree_recent_logs"] = tree
-    ui["cols_recent_logs"] = cols
 
 
     # ---------------- Register Page ----------------
@@ -117,7 +163,7 @@ def create_main_window() -> tuple[ctk.CTk, Dict[str, object]]:
     card_reg_right = ctk.CTkFrame(reg, corner_radius=12)
     card_reg_right.grid(row=0, column=1, padx=14, pady=14, sticky="nsew")
 
-    ctk.CTkLabel(card_reg_left, text="Đăng ký khuôn mặt (demo)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(18, 8))
+    ctk.CTkLabel(card_reg_left, text="Đăng ký chấm công", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(18, 8))
 
     reg_form = ctk.CTkFrame(card_reg_left, corner_radius=12)
     reg_form.pack(fill="both", expand=True, padx=14, pady=14)
@@ -138,62 +184,50 @@ def create_main_window() -> tuple[ctk.CTk, Dict[str, object]]:
     ui["ent_reg_sdt"] = ctk.CTkEntry(reg_form, width=260)
     ui["ent_reg_sdt"].grid(row=3, column=1, padx=10, pady=8)
 
-    ui["btn_upload_face"] = ctk.CTkButton(reg_form, text="Chọn file ảnh (demo)")
-    ui["btn_upload_face"].grid(row=4, column=0, columnspan=2, padx=10, pady=(12, 6), sticky="ew")
-
-    ui["ent_face_path"] = ctk.CTkEntry(reg_form, placeholder_text="Đường dẫn ảnh sẽ hiện ở đây", width=340)
-    ui["ent_face_path"].grid(row=5, column=0, columnspan=2, padx=10, pady=6, sticky="ew")
-
     ui["btn_register_student"] = ctk.CTkButton(reg_form, text="Lưu sinh viên", fg_color="#1E90FF")
+    ui["btn_register_student"].grid(row=4, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
 
-    ui["btn_register_student"].grid(row=6, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
-
-    ui["btn_register_face"] = ctk.CTkButton(reg_form, text="Register face (demo)", fg_color="#A020F0")
-
-    ui["btn_register_face"].grid(row=7, column=0, columnspan=2, padx=10, pady=6, sticky="ew")
+    ui["btn_register_face"] = ctk.CTkButton(reg_form, text="Đăng ký", fg_color="#A020F0")
+    ui["btn_register_face"].grid(row=5, column=0, columnspan=2, padx=10, pady=6, sticky="ew")
 
     ui["lbl_reg_status"] = ctk.CTkLabel(reg_form, text="Trạng thái: sẵn sàng", anchor="w")
-    ui["lbl_reg_status"].grid(row=8, column=0, columnspan=2, padx=10, pady=(12, 0), sticky="w")
+    ui["lbl_reg_status"].grid(row=6, column=0, columnspan=2, padx=10, pady=(12, 0), sticky="w")
 
-    # Register list
-    ctk.CTkLabel(card_reg_right, text="Danh sách sinh viên", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(18, 8), padx=14, anchor="w")
-    reg_tree_frame = ctk.CTkFrame(card_reg_right, corner_radius=10)
-    reg_tree_frame.pack(fill="both", expand=True, padx=14, pady=14)
 
-    reg_cols = ["msv", "ho_ten", "lop", "sdt"]
-    reg_tree = ttk.Treeview(reg_tree_frame, columns=reg_cols, show="headings", height=16)
-    for c in reg_cols:
-        reg_tree.heading(c, text=c)
-        reg_tree.column(c, width=140 if c != "ho_ten" else 220)
-    reg_tree.pack(fill="both", expand=True)
+    # ---------------- Camera frame (Register Page - Right side) ----------------
+    frame_camera = ctk.CTkFrame(
+        card_reg_right,
+        corner_radius=10,
+        fg_color="#2b2b2b",
+    )
+    frame_camera.pack(fill="both", expand=True, padx=14, pady=14)
 
-    ui["tree_students"] = reg_tree
+    ui["frame_camera"] = frame_camera
+
+    ui["label_video"] = ctk.CTkLabel(
+        frame_camera,
+        text="Hệ thống sẵn sàng - Nhấn Đăng ký để mở Camera",
+        font=ctk.CTkFont(size=16, weight="bold"),
+        text_color="#00E5FF",
+        justify="center",
+        wraplength=800,
+    )
+    ui["label_video"].pack(expand=True, fill="both")
+
 
     # ---------------- Stats Page ----------------
     stats = pages["stats"]
     stats.grid_columnconfigure(0, weight=1)
     stats.grid_columnconfigure(1, weight=1)
 
-    ctk.CTkLabel(stats, text="Thống kê", font=ctk.CTkFont(size=22, weight="bold")).pack(pady=18)
+    # Stats UI (2 charts + KPI)
+    from views.ctk_stats_view import StatsView
 
-    top_cards = ctk.CTkFrame(stats, corner_radius=12)
-    top_cards.pack(fill="x", padx=18, pady=10)
-
-    ui["lbl_stat_total"] = ctk.CTkLabel(top_cards, text="Tổng log: 0", font=ctk.CTkFont(size=14, weight="bold"))
-    ui["lbl_stat_total"].grid(row=0, column=0, padx=14, pady=14, sticky="w")
-
-    ui["lbl_stat_ok"] = ctk.CTkLabel(top_cards, text="OK: 0", font=ctk.CTkFont(size=14, weight="bold"))
-    ui["lbl_stat_ok"].grid(row=0, column=1, padx=14, pady=14, sticky="w")
-
-    ui["lbl_stat_today"] = ctk.CTkLabel(top_cards, text="Hôm nay: 0", font=ctk.CTkFont(size=14, weight="bold"))
-    ui["lbl_stat_today"].grid(row=1, column=0, padx=14, pady=14, sticky="w")
-
-    ui["lbl_stat_today_ok"] = ctk.CTkLabel(top_cards, text="Hôm nay OK: 0", font=ctk.CTkFont(size=14, weight="bold"))
-    ui["lbl_stat_today_ok"].grid(row=1, column=1, padx=14, pady=14, sticky="w")
+    stats_view = StatsView(stats)
+    ui["stats_view"] = stats_view
 
     ui["btn_refresh_stats"] = ctk.CTkButton(stats, text="Làm mới", fg_color="#28A745")
-
-    ui["btn_refresh_stats"].pack(pady=10)
+    ui["btn_refresh_stats"].pack(pady=(0, 18))
 
     # ---------------- History Page ----------------
     his = pages["history"]
@@ -209,11 +243,9 @@ def create_main_window() -> tuple[ctk.CTk, Dict[str, object]]:
     ui["ent_hist_msv"].grid(row=0, column=1, padx=10, pady=10, sticky="w")
 
     ui["btn_hist_filter"] = ctk.CTkButton(filter_frame, text="Lọc", fg_color="#1E90FF")
-
     ui["btn_hist_filter"].grid(row=0, column=2, padx=10, pady=10)
 
     ui["btn_hist_refresh"] = ctk.CTkButton(filter_frame, text="Làm mới", fg_color="#28A745")
-
     ui["btn_hist_refresh"].grid(row=0, column=3, padx=10, pady=10)
 
     table_frame = ctk.CTkFrame(his, corner_radius=12)
