@@ -224,7 +224,6 @@ def chay_ung_dung():
         # Spawn camera subprocess dùng đúng interpreter (tránh lệch venv)
         proc = subprocess.Popen([sys.executable, script_path])
 
-
         polling_interval_ms = 250
 
         def poll_once():
