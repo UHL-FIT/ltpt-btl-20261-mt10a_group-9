@@ -251,11 +251,16 @@ def create_main_window() -> tuple[ctk.CTk, Dict[str, object]]:
     table_frame = ctk.CTkFrame(his, corner_radius=12)
     table_frame.pack(fill="both", expand=True, padx=18, pady=14)
 
-    hist_cols = ["log_id", "msv", "time", "status", "note"]
+    # Bỏ hiển thị log_id cho đỡ rối
+    hist_cols = ["msv", "time", "status", "note"]
     hist_tree = ttk.Treeview(table_frame, columns=hist_cols, show="headings", height=18)
     for c in hist_cols:
         hist_tree.heading(c, text=c)
-        hist_tree.column(c, width=140 if c != "time" and c != "note" else 240)
+        hist_tree.column(c, width=140 if c not in ("time", "note") else 240)
+
+
+
+
     hist_tree.pack(fill="both", expand=True)
 
     ui["tree_history"] = hist_tree

@@ -8,3 +8,4 @@ dist/
 .idea/
 .vscode/
 example_prj/
+firebase_key.json

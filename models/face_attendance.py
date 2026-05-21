@@ -4,6 +4,8 @@ from datetime import datetime, date
 from typing import Dict, Optional, Tuple
 import pandas as pd
 from utils.logger import setup_logger
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 logger = setup_logger("face_attendance")
 
@@ -14,65 +16,51 @@ def _get_base_dir() -> str:
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(__file__))
 
+FIREBASE_KEY_JSON = os.path.join(_get_base_dir(), "firebase_key.json")
+cred = credentials.Certificate(FIREBASE_KEY_JSON)
+firebase_admin.initialize_app(cred)
+db = firestore.client()
+
 BASE_DIR = _get_base_dir()
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 FACE_STUDENTS_CSV = os.path.join(DATA_DIR, "face_students.csv")
 FACE_LOGS_CSV = os.path.join(DATA_DIR, "face_logs.csv")
 
-# Tạo dữ liệu mẫu nếu chưa có file csv
-def _ensure_csv_files() -> None:
-    os.makedirs(DATA_DIR, exist_ok=True)
-
-    if not os.path.exists(FACE_STUDENTS_CSV):
-        # Mặc định 1 sinh viên mẫu để UI nhìn thấy dữ liệu.
-        df = pd.DataFrame(
-            [
-                {
-                    "msv": "SV001",
-                    "ho_ten": "Nguyen Van A",
-                    "lop": "CTK42",
-                    "sdt": "",
-                    "face_path": "",
-                    "created_at": datetime.now().isoformat(timespec="seconds"),
-                }
-            ]
-        )
-        df.to_csv(FACE_STUDENTS_CSV, index=False, encoding="utf-8-sig")
-
-    if not os.path.exists(FACE_LOGS_CSV):
-        df = pd.DataFrame(
-            [
-                {
-                    "log_id": "1",
-                    "msv": "SV001",
-                    "time": datetime.now().isoformat(timespec="seconds"),
-                    "status": "OK",
-                    "note": "",
-                }
-            ]
-        )
-        df.to_csv(FACE_LOGS_CSV, index=False, encoding="utf-8-sig")
-
-# Đọc danh sách sinh viên từ file csv
+# Đọc danh sách sinh viên đã đăng ký từ Firestore collection "register"
 def load_students() -> pd.DataFrame:
-    _ensure_csv_files()
-    df = pd.read_csv(FACE_STUDENTS_CSV, dtype=str, encoding="utf-8-sig")
-    if df.empty:
+    try:
+        docs = db.collection("register").stream()
+        rows: list[dict] = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            rows.append(
+                {
+                    "msv": str(doc.id).strip().upper(),
+                    "ho_ten": str(data.get("name", "") or "").strip(),
+                    "lop": str(data.get("class", "") or "").strip(),
+                    "sdt": str(data.get("phone_number", "") or "").strip(),
+                    "face_path": str(data.get("face_path", "") or "").strip(),
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            # Đảm bảo DataFrame có đủ cột để tránh lỗi khi dùng iterrows/ get
+            return pd.DataFrame(columns=["msv", "ho_ten", "lop", "sdt", "face_path"])
+
+        df = df.fillna("")
+        df["msv"] = df["msv"].astype(str).str.strip().str.upper()
         return df
-    for col in ["msv", "ho_ten", "lop", "sdt", "face_path", "created_at"]:
-        if col not in df.columns:
-            df[col] = ""
-    df = df.fillna("")
-    df["msv"] = df["msv"].astype(str).str.strip().str.upper()
-    return df
+    
+    except Exception as e:
+        logger.exception("load_students() firestore error")
+        return pd.DataFrame(columns=["msv", "ho_ten", "lop", "sdt", "face_path"])
 
-# Thêm sinh viên 
+
+# Thêm sinh viên vào database, cụ thể là collection "register"
 def add_student(student: Dict[str, str]) -> Tuple[bool, str]:
-    """student: {msv, ho_ten, lop, sdt, face_path}"""
-    _ensure_csv_files()
-    df = load_students()
-
+    # student: {msv, ho_ten, lop, sdt, face_path}
     msv = str(student.get("msv", "")).strip().upper()
     ho_ten = str(student.get("ho_ten", "")).strip()
     lop = str(student.get("lop", "")).strip()
@@ -81,53 +69,90 @@ def add_student(student: Dict[str, str]) -> Tuple[bool, str]:
 
     if not msv:
         return False, "MSV không được để trống"
-    
+
     if not ho_ten:
         return False, "Họ tên không được để trống"
+
+    try:
+        doc_ref = db.collection("register").document(msv)
+        doc = doc_ref.get()
+
+        if doc.exists: return False, "MSV đã tồn tại"
+
+        doc_ref.set(
+            {
+                "name": ho_ten,
+                "class": lop,
+                "phone_number": sdt,
+                "face_path": face_path,
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
+        return True, "Đã thêm sinh viên"
     
-    if (df["msv"] == msv).any():
-        return False, "MSV đã tồn tại"
+    except Exception:
+        logger.exception("add_student() error")
+        return False, "Lỗi khi thêm sinh viên" 
 
-    new_row = {
-        "msv": msv,
-        "ho_ten": ho_ten,
-        "lop": lop,
-        "sdt": sdt,
-        "face_path": face_path,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-    }
 
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    df.to_csv(FACE_STUDENTS_CSV, index=False, encoding="utf-8-sig")
-    return True, "Đã thêm sinh viên" 
-
-# Cập nhật thông itn sinh viên
+# Cập nhật thông tin sinh viên trong database
 def update_student(msv: str, update: Dict[str, str]) -> Tuple[bool, str]:
-    _ensure_csv_files()
-    df = load_students()
+    """Update thông tin sinh viên trong Firestore.
+
+    update có thể chứa các key:
+    - ho_ten -> name
+    - lop -> class
+    - sdt -> phone_number
+    - face_path -> face_path
+    """
     msv = str(msv).strip().upper()
+    if not msv:
+        return False, "MSV không hợp lệ"
 
-    idx = df.index[df["msv"] == msv].tolist()
-    if not idx:
-        return False, "Không tìm thấy MSV"
+    try:
+        doc_ref = db.collection("register").document(msv)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return False, "Không tìm thấy MSV"
 
-    for key in ["ho_ten", "lop", "sdt", "face_path"]:
-        if key in update:
-            df.loc[idx, key] = str(update.get(key, "")).strip()
+        payload: Dict[str, str] = {}
+        if "ho_ten" in update:
+            payload["name"] = str(update.get("ho_ten", "") or "").strip()
+        if "lop" in update:
+            payload["class"] = str(update.get("lop", "") or "").strip()
+        if "sdt" in update:
+            payload["phone_number"] = str(update.get("sdt", "") or "").strip()
+        if "face_path" in update:
+            payload["face_path"] = str(update.get("face_path", "") or "").strip()
 
-    df.to_csv(FACE_STUDENTS_CSV, index=False, encoding="utf-8-sig")
-    return True, "Đã cập nhật"
+        if not payload:
+            return False, "Không có dữ liệu để cập nhật"
 
-# Xóa sinh viên
+        doc_ref.update(payload)
+        return True, "Đã cập nhật"
+    
+    except Exception:
+        logger.exception("update_student() error")
+        return False, "Lỗi khi cập nhật"
+
+# Xóa sinh viên trong databse
 def delete_student(msv: str) -> Tuple[bool, str]:
-    _ensure_csv_files()
-    df = load_students()
     msv = str(msv).strip().upper()
-    if not (df["msv"] == msv).any():
-        return False, "Không tìm thấy MSV"
-    df = df[df["msv"] != msv]
-    df.to_csv(FACE_STUDENTS_CSV, index=False, encoding="utf-8-sig")
-    return True, "Đã xoá"
+    if not msv:
+        return False, "MSV không hợp lệ"
+
+    try:
+        doc_ref = db.collection("register").document(msv)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return False, "Không tìm thấy MSV"
+        doc_ref.delete()
+        return True, "Đã xoá"
+    
+    except Exception:
+        logger.exception("delete_student() error")
+        return False, "Lỗi khi xoá"
+
 
 def register_face(msv: str, face_path: str = "") -> Tuple[bool, str]:
     """Liên kết ảnh khuôn mặt với sinh viên theo MSV.
@@ -153,35 +178,40 @@ def register_face(msv: str, face_path: str = "") -> Tuple[bool, str]:
     ok, msg = update_student(msv, {"face_path": face_path})
     return ok, msg
 
-# Thêm dòng log vào face_log.csv
+
+# Thêm dòng log vào Firestore collection "logs"
 def do_attendance(msv: str, status: str = "OK", note: str = "") -> Tuple[bool, str]:
-    _ensure_csv_files()
-    df_students = load_students()
-
+    """Ghi 1 bản ghi chấm công vào collection `logs`.
+    - Doc id: tự sinh
+    - Field tối thiểu: msv, time, status, note
+    - KHÔNG thêm created_at/date (theo yêu cầu)
+    """
     msv = str(msv).strip().upper()
-    if not (df_students["msv"] == msv).any():
-        return False, "Không tồn tại MSV"
+    status = str(status).strip().upper()
+    note = str(note).strip()
 
-    df_logs = pd.read_csv(FACE_LOGS_CSV, dtype=str, encoding="utf-8-sig")
-    if df_logs.empty:
-        next_id = "1"
-    else:
-        try:
-            next_id = str(int(df_logs["log_id"].astype(str).str.strip().fillna("0").max()) + 1)
-        except Exception:
-            next_id = str(len(df_logs) + 1)
+    if not msv:
+        return False, "MSV không hợp lệ"
 
-    new_row = {
-        "log_id": next_id,
-        "msv": msv,
-        "time": datetime.now().isoformat(timespec="seconds"),
-        "status": str(status).strip().upper(),
-        "note": str(note).strip(),
-    }
+    try:
+        # kiểm tra MSV tồn tại
+        doc = db.collection("register").document(msv).get()
+        if not doc.exists:
+            return False, "Không tồn tại MSV"
 
-    df_logs = pd.concat([df_logs, pd.DataFrame([new_row])], ignore_index=True)
-    df_logs.to_csv(FACE_LOGS_CSV, index=False, encoding="utf-8-sig")
-    return True, "Đã chấm công"
+        db.collection("logs").add(
+            {
+                "msv": msv,
+                "time": datetime.now().isoformat(timespec="seconds"),
+                "status": status,
+                "note": note,
+            }
+        )
+        return True, "Đã chấm công"
+    
+    except Exception:
+        logger.exception("do_attendance() error")
+        return False, "Lỗi khi chấm công"
 
 
 def _parse_time_series(df: pd.DataFrame) -> pd.DataFrame:
@@ -192,37 +222,102 @@ def _parse_time_series(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+""" Lấy lịch sử chấm công từ collection `logs`.
+    Trả về DataFrame với các cột: log_id, msv, time, status, note
+"""
 def get_history(start: Optional[date] = None, end: Optional[date] = None, msv: str = "") -> pd.DataFrame:
-    _ensure_csv_files()
-    df = pd.read_csv(FACE_LOGS_CSV, dtype=str, encoding="utf-8-sig")
-    if df.empty:
+    
+    try:
+        msv = str(msv or "").strip().upper()
+
+        query = db.collection("logs")
+        docs = query.stream()
+
+        rows: list[dict] = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            row_time = data.get("time", "")
+            rows.append(
+                {
+                    "log_id": str(doc.id),
+                    "msv": str(data.get("msv", "") or "").strip().upper(),
+                    "time": row_time,
+                    "status": str(data.get("status", "") or ""),
+                    "note": str(data.get("note", "") or ""),
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return df
+
+        df["time"] = pd.to_datetime(df["time"], errors="coerce")
+        if msv:
+            df = df[df["msv"].astype(str).str.upper() == msv]
+
+        if start is not None:
+            start_dt = datetime.combine(start, datetime.min.time())
+            df = df[df["time"] >= start_dt]
+
+        if end is not None:
+            end_dt = datetime.combine(end, datetime.max.time())
+            df = df[df["time"] <= end_dt]
+
+        df = df.sort_values("time", ascending=False)
+        df["time"] = df["time"].dt.strftime("%Y-%m-%d %H:%M:%S")
         return df
+    
+    except Exception:
+        logger.exception("get_history() error")
+        return pd.DataFrame(columns=["log_id", "msv", "time", "status", "note"])
 
-    df = _parse_time_series(df)
-
-    if msv:
-        msv = str(msv).strip().upper()
-        df = df[df["msv"].astype(str).str.upper() == msv]
-
-    if start is not None:
-        start_dt = datetime.combine(start, datetime.min.time())
-        df = df[df["time"] >= start_dt]
-
-    if end is not None:
-        end_dt = datetime.combine(end, datetime.max.time())
-        df = df[df["time"] <= end_dt]
-
-    df = df.sort_values("time", ascending=False)
-    # Format back string
-    df["time"] = df["time"].dt.strftime("%Y-%m-%d %H:%M:%S")
-    return df
-
-
+"""Thống kê tổng quát + theo ngày gần nhất từ collection `logs`."""
 def get_stats() -> Dict[str, object]:
-    """Thống kê tổng quát + theo ngày gần nhất."""
-    _ensure_csv_files()
-    df = pd.read_csv(FACE_LOGS_CSV, dtype=str, encoding="utf-8-sig")
-    if df.empty:
+    try:
+        docs = db.collection("logs").stream()
+        rows: list[dict] = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            rows.append(
+                {
+                    "msv": str(data.get("msv", "") or "").strip().upper(),
+                    "time": data.get("time", ""),
+                    "status": str(data.get("status", "") or ""),
+                    "note": str(data.get("note", "") or ""),
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return {
+                "total_logs": 0,
+                "ok": 0,
+                "unknown": 0,
+                "today_logs": 0,
+                "today_ok": 0,
+            }
+
+        df["time"] = pd.to_datetime(df["time"], errors="coerce")
+        df["status"] = df["status"].fillna("").astype(str).str.upper().str.strip()
+
+        total_logs = len(df)
+        ok = int((df["status"] == "OK").sum())
+        unknown = int((df["status"] != "OK").sum())
+
+        now = datetime.now()
+        today_mask = (df["time"].dt.date == now.date())
+        today_logs = int(today_mask.sum())
+        today_ok = int(((df["time"].dt.date == now.date()) & (df["status"] == "OK")).sum())
+
+        return {
+            "total_logs": total_logs,
+            "ok": ok,
+            "unknown": unknown,
+            "today_logs": today_logs,
+            "today_ok": today_ok,
+        }
+    except Exception:
+        logger.exception("get_stats() error")
         return {
             "total_logs": 0,
             "ok": 0,
@@ -230,26 +325,4 @@ def get_stats() -> Dict[str, object]:
             "today_logs": 0,
             "today_ok": 0,
         }
-
-    df = _parse_time_series(df)
-
-    total_logs = len(df)
-    df["status"] = df["status"].fillna("").astype(str).str.upper().str.strip()
-    ok = int((df["status"] == "OK").sum())
-
-    # unknown: nếu bạn dùng các status khác thì cập nhật sau.
-    unknown = int((df["status"] != "OK").sum())
-
-    now = datetime.now()
-    today_mask = (df["time"].dt.date == now.date())
-    today_logs = int(today_mask.sum())
-    today_ok = int(((df["time"].dt.date == now.date()) & (df["status"] == "OK")).sum())
-
-    return {
-        "total_logs": total_logs,
-        "ok": ok,
-        "unknown": unknown,
-        "today_logs": today_logs,
-        "today_ok": today_ok,
-    }
 

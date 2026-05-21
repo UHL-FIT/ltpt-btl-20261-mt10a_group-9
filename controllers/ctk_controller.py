@@ -44,7 +44,6 @@ def _load_history(ui, msv_filter: str = ""):
             "",
             tk.END,
             values=[
-                row.get("log_id", ""),
                 row.get("msv", ""),
                 row.get("time", ""),
                 row.get("status", ""),
