@@ -97,9 +97,6 @@ def _load_already_marked_today() -> set[str]:
         # df["time"] là string
         marked: set[str] = set()
         for _, row in df.iterrows():
-            status = str(row.get("status", "")).strip().upper()
-            if status != "OK":
-                continue
             msv = str(row.get("msv", "")).strip().upper()
             if not msv:
                 continue

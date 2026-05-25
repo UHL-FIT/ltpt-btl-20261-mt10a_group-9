@@ -4,6 +4,7 @@ from utils.logger import setup_logger
 from models import face_attendance
 import views.ctk_view as ctk_view
 import sys
+import os
 logger = setup_logger("ctk_controller")
 
 def _set_label(ui, key: str, text: str):
@@ -31,7 +32,18 @@ def _load_recent_logs(ui, limit: int = 10):
         return
     df = df.head(limit)
     for _, row in df.iterrows():
-        tree.insert("", tk.END, values=[row.get("log_id", ""), row.get("msv", ""), row.get("time", ""), row.get("status", "")])
+        tree.insert(
+            "",
+            tk.END,
+            values=[
+                row.get("msv", ""),
+                row.get("name", ""),
+                row.get("class", ""),
+                row.get("phone_number", ""),
+                row.get("time", ""),
+            ],
+        )
+
 
 def _load_history(ui, msv_filter: str = ""):
     tree = ui["tree_history"]
@@ -39,17 +51,20 @@ def _load_history(ui, msv_filter: str = ""):
     df = face_attendance.get_history(msv=msv_filter)
     if df is None or df.empty:
         return
+
     for _, row in df.iterrows():
         tree.insert(
             "",
             tk.END,
             values=[
                 row.get("msv", ""),
+                row.get("name", ""),
+                row.get("class", ""),
+                row.get("phone_number", ""),
                 row.get("time", ""),
-                row.get("status", ""),
-                row.get("note", ""),
             ],
         )
+
 
 def _refresh_stats(ui):
     """Refresh stats page charts + KPI."""
@@ -300,14 +315,233 @@ def chay_ung_dung():
 
     ui["btn_refresh_stats"].configure(command=on_refresh_stats)
 
+    def on_export_report():
+        # Export toàn bộ logs: msv, time, status, note
+        try:
+            import customtkinter as ctk
+
+            # Tạo cửa sổ CTkToplevel hiện đại
+            export_win = ctk.CTkToplevel(root)
+            export_win.title("Xuất báo cáo")
+            export_win.geometry("540x350")
+            export_win.resizable(False, False)
+
+            # Đảm bảo cửa sổ luôn ở trên và khóa tiêu điểm
+            export_win.transient(root)
+            export_win.grab_set()
+
+            # State lưu thông tin xuất
+            state = {"path": ""}
+
+            # Khai báo biến control
+            var_fmt = ctk.StringVar(value="CSV")
+            path_var = ctk.StringVar(value="")
+
+            # Lắng nghe sự thay đổi định dạng để tự động cập nhật phần mở rộng file (UX cực tốt)
+            def on_format_change(*args):
+                current_path = state["path"]
+                if current_path:
+                    base, _ = os.path.splitext(current_path)
+                    new_ext = ".csv" if var_fmt.get() == "CSV" else ".xlsx"
+                    new_path = base + new_ext
+                    state["path"] = new_path
+                    path_var.set(new_path)
+
+            var_fmt.trace_add("write", on_format_change)
+
+            # Container chính bo góc mềm mại
+            main_frame = ctk.CTkFrame(export_win, corner_radius=12)
+            main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+            # Tiêu đề cửa sổ
+            lbl_title = ctk.CTkLabel(
+                main_frame,
+                text="CẤU HÌNH XUẤT BÁO CÁO",
+                font=ctk.CTkFont(size=16, weight="bold")
+            )
+            lbl_title.pack(pady=(15, 10))
+
+            # --- Phần 1: Chọn định dạng file ---
+            format_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+            format_frame.pack(fill="x", padx=20, pady=10)
+
+            lbl_format = ctk.CTkLabel(
+                format_frame,
+                text="1. Định dạng file:",
+                font=ctk.CTkFont(size=14, weight="bold")
+            )
+            lbl_format.pack(side="left", padx=(0, 20))
+
+            rb_csv = ctk.CTkRadioButton(
+                format_frame,
+                text="CSV (.csv)",
+                variable=var_fmt,
+                value="CSV",
+                font=ctk.CTkFont(size=13)
+            )
+            rb_csv.pack(side="left", padx=10)
+
+            rb_xlsx = ctk.CTkRadioButton(
+                format_frame,
+                text="Excel (.xlsx)",
+                variable=var_fmt,
+                value="XLSX",
+                font=ctk.CTkFont(size=13)
+            )
+            rb_xlsx.pack(side="left", padx=10)
+
+            # --- Phần 2: Chọn nơi lưu file ---
+            save_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+            save_frame.pack(fill="x", padx=20, pady=10)
+
+            lbl_save = ctk.CTkLabel(
+                save_frame,
+                text="2. Nơi lưu file:",
+                font=ctk.CTkFont(size=14, weight="bold")
+            )
+            lbl_save.pack(anchor="w", pady=(0, 5))
+
+            path_row = ctk.CTkFrame(save_frame, fg_color="transparent")
+            path_row.pack(fill="x")
+
+            path_entry = ctk.CTkEntry(
+                path_row,
+                textvariable=path_var,
+                placeholder_text="Bấm 'Duyệt' để chọn nơi lưu file...",
+                font=ctk.CTkFont(size=13),
+                state="readonly"
+            )
+            path_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+            def choose_path():
+                fmt = var_fmt.get()
+                default_ext = ".csv" if fmt == "CSV" else ".xlsx"
+                filetypes = [("CSV files", "*.csv")] if fmt == "CSV" else [("Excel files", "*.xlsx")]
+
+                save_path = filedialog.asksaveasfilename(
+                    parent=export_win,
+                    defaultextension=default_ext,
+                    filetypes=filetypes,
+                    initialfile=f"lich-su-cham-cong{default_ext}",
+                    title="Chọn nơi lưu báo cáo",
+                )
+                if not save_path:
+                    return
+                state["path"] = save_path
+                path_var.set(save_path)
+
+            btn_browse = ctk.CTkButton(
+                path_row,
+                text="Duyệt...",
+                width=80,
+                fg_color="#3b82f6",
+                hover_color="#2563eb",
+                font=ctk.CTkFont(size=13, weight="bold"),
+                command=choose_path
+            )
+            btn_browse.pack(side="right")
+
+            # --- Phần 3: Footer chứa nút hành động (góc dưới bên phải) ---
+            footer_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+            footer_frame.pack(fill="x", side="bottom", pady=(15, 10), padx=20)
+
+            # Định nghĩa hàm thực hiện xuất
+            def do_export():
+                fmt = var_fmt.get()
+                if not state["path"]:
+                    messagebox.showwarning("Thiếu dữ liệu", "Vui lòng chọn nơi lưu trước")
+                    return
+
+                if fmt not in ("CSV", "XLSX"):
+                    messagebox.showerror("Lỗi", "Loại file không hợp lệ")
+                    return
+
+                # Lấy toàn bộ logs từ database/Firestore
+                df = face_attendance.get_history(msv="")
+                if df is None or df.empty:
+                    messagebox.showwarning("Không có dữ liệu", "Chưa có log để xuất")
+                    return
+
+                # Chỉ xuất 5 cột tương ứng với giao diện lịch sử hiện tại
+                export_df = df[["msv", "name", "class", "phone_number", "time"]].copy()
+                export_df.rename(
+                    columns={
+                        "msv": "Mã SV",
+                        "name": "Họ tên",
+                        "class": "Lớp",
+                        "phone_number": "Số điện thoại",
+                        "time": "Thời gian"
+                    },
+                    inplace=True
+                )
+
+                try:
+                    if fmt == "CSV":
+                        export_df.to_csv(state["path"], index=False, encoding="utf-8-sig")
+                    else:
+                        # Excel
+                        export_df.to_excel(state["path"], index=False, sheet_name="History")
+
+                    # Kiểm tra lại xem file đã được ghi ra chưa
+                    if not os.path.exists(state["path"]):
+                        raise FileNotFoundError(f"Chưa thấy file tại: {state['path']}")
+
+                except Exception as e:
+                    messagebox.showerror("Xuất thất bại", str(e))
+                    return
+
+                # Hiển thị popup đã xuất thành công
+                messagebox.showinfo("Thành công", f"Đã xuất báo cáo thành công\n{state['path']}")
+                try:
+                    export_win.destroy()
+                except Exception:
+                    pass
+
+            btn_export = ctk.CTkButton(
+                footer_frame,
+                text="Xuất",
+                width=100,
+                fg_color="#10b981",
+                hover_color="#059669",
+                font=ctk.CTkFont(size=13, weight="bold"),
+                command=do_export
+            )
+            btn_export.pack(side="right", padx=(10, 0))
+
+            btn_cancel = ctk.CTkButton(
+                footer_frame,
+                text="Hủy",
+                width=100,
+                fg_color="#ef4444",
+                hover_color="#dc2626",
+                font=ctk.CTkFont(size=13, weight="bold"),
+                command=export_win.destroy
+            )
+            btn_cancel.pack(side="right")
+
+        except Exception as e:
+            try:
+                messagebox.showerror("Lỗi", str(e))
+            except Exception:
+                pass
+
     ui["btn_hist_refresh"].configure(command=on_hist_refresh)
 
     ui["btn_hist_filter"].configure(command=on_hist_filter)
+
+    # Xuất báo cáo (toàn bộ logs) nằm trong tab lịch sử
+    ui["btn_export_report"] = ui.get("btn_export_report")
+    if ui.get("btn_export_report") is not None:
+        ui["btn_export_report"].configure(command=on_export_report)
+    else:
+        # nếu UI chưa có nút export thì không crash
+        pass
 
     # ---------- Initial load ----------
     _load_recent_logs(ui)
     _load_history(ui)
     _refresh_stats(ui)
+
 
     root.mainloop()
 

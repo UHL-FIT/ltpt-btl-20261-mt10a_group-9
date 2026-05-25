@@ -182,33 +182,40 @@ def register_face(msv: str, face_path: str = "") -> Tuple[bool, str]:
 # Thêm dòng log vào Firestore collection "logs"
 def do_attendance(msv: str, status: str = "OK", note: str = "") -> Tuple[bool, str]:
     """Ghi 1 bản ghi chấm công vào collection `logs`.
-    - Doc id: tự sinh
-    - Field tối thiểu: msv, time, status, note
-    - KHÔNG thêm created_at/date (theo yêu cầu)
+
+    Đồng bộ với tab Lịch sử mong muốn (không hiển thị status/note):
+    - id: (doc id ngẫu nhiên)
+    - name, class, phone_number lấy từ collection `register`.
+    - time lấy thời điểm hiện tại.
+
+    Lưu ý:
+    - Hàm vẫn giữ tham số status/note để không làm hỏng các chỗ gọi cũ,
+      nhưng sẽ KHÔNG ghi chúng vào `logs`.
     """
     msv = str(msv).strip().upper()
-    status = str(status).strip().upper()
-    note = str(note).strip()
 
     if not msv:
         return False, "MSV không hợp lệ"
 
     try:
-        # kiểm tra MSV tồn tại
-        doc = db.collection("register").document(msv).get()
-        if not doc.exists:
+        reg_doc = db.collection("register").document(msv).get()
+        if not reg_doc.exists:
             return False, "Không tồn tại MSV"
+
+        reg_data = reg_doc.to_dict() or {}
 
         db.collection("logs").add(
             {
-                "msv": msv,
+                # theo yêu cầu của bạn: field `id` trong logs là mã SV
+                "id": msv,
+                "name": str(reg_data.get("name", "") or "").strip(),
+                "class": str(reg_data.get("class", "") or "").strip(),
+                "phone_number": str(reg_data.get("phone_number", "") or "").strip(),
                 "time": datetime.now().isoformat(timespec="seconds"),
-                "status": status,
-                "note": note,
             }
         )
         return True, "Đã chấm công"
-    
+
     except Exception:
         logger.exception("do_attendance() error")
         return False, "Lỗi khi chấm công"
@@ -222,26 +229,41 @@ def _parse_time_series(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-""" Lấy lịch sử chấm công từ collection `logs`.
-    Trả về DataFrame với các cột: log_id, msv, time, status, note
+"""Lấy lịch sử chấm công từ collection `logs`.
+
+Trả về DataFrame với các cột:
+- log_id: document id (đúng theo yêu cầu bạn nói: MaSV lấy từ id)
+- msv: alias của log_id
+- name: họ tên
+- class: lớp
+- phone_number: SĐT
+- time: thời gian
+
+Các cột status/note giữ lại nếu Firestore có.
 """
+
 def get_history(start: Optional[date] = None, end: Optional[date] = None, msv: str = "") -> pd.DataFrame:
-    
     try:
         msv = str(msv or "").strip().upper()
 
-        query = db.collection("logs")
-        docs = query.stream()
+        docs = db.collection("logs").stream()
 
         rows: list[dict] = []
         for doc in docs:
             data = doc.to_dict() or {}
-            row_time = data.get("time", "")
+
+            log_id = str(doc.id).strip().upper()
+            msv_val = str(data.get("id", "") or "").strip().upper()
+
             rows.append(
                 {
-                    "log_id": str(doc.id),
-                    "msv": str(data.get("msv", "") or "").strip().upper(),
-                    "time": row_time,
+                    "log_id": log_id,
+                    "msv": msv_val,
+                    "name": str(data.get("name", "") or "").strip(),
+                    "class": str(data.get("class", "") or "").strip(),
+                    "phone_number": str(data.get("phone_number", "") or "").strip(),
+                    "time": data.get("time", ""),
+                    # giữ lại nếu có
                     "status": str(data.get("status", "") or ""),
                     "note": str(data.get("note", "") or ""),
                 }
@@ -252,8 +274,12 @@ def get_history(start: Optional[date] = None, end: Optional[date] = None, msv: s
             return df
 
         df["time"] = pd.to_datetime(df["time"], errors="coerce")
+
+        # filter theo mã SV: lấy theo field `id` trong logs
+        # (ma sv hiển thị ở cột msv = id trong logs)
         if msv:
             df = df[df["msv"].astype(str).str.upper() == msv]
+
 
         if start is not None:
             start_dt = datetime.combine(start, datetime.min.time())
@@ -265,13 +291,19 @@ def get_history(start: Optional[date] = None, end: Optional[date] = None, msv: s
 
         df = df.sort_values("time", ascending=False)
         df["time"] = df["time"].dt.strftime("%Y-%m-%d %H:%M:%S")
+
         return df
-    
+
     except Exception:
         logger.exception("get_history() error")
-        return pd.DataFrame(columns=["log_id", "msv", "time", "status", "note"])
+        return pd.DataFrame(columns=["log_id", "msv", "name", "class", "phone_number", "time"])
 
-"""Thống kê tổng quát + theo ngày gần nhất từ collection `logs`."""
+"""Thống kê tổng quát + theo ngày gần nhất từ collection `logs`.
+
+Chỉ dùng các field có trong tab lịch sử: id/msv, time.
+(Phần status/note đã bỏ theo yêu cầu.)
+"""
+
 def get_stats() -> Dict[str, object]:
     try:
         docs = db.collection("logs").stream()
@@ -280,12 +312,11 @@ def get_stats() -> Dict[str, object]:
             data = doc.to_dict() or {}
             rows.append(
                 {
-                    "msv": str(data.get("msv", "") or "").strip().upper(),
+                    "msv": str(data.get("id", "") or "").strip().upper(),
                     "time": data.get("time", ""),
-                    "status": str(data.get("status", "") or ""),
-                    "note": str(data.get("note", "") or ""),
                 }
             )
+
 
         df = pd.DataFrame(rows)
         if df.empty:
@@ -298,31 +329,24 @@ def get_stats() -> Dict[str, object]:
             }
 
         df["time"] = pd.to_datetime(df["time"], errors="coerce")
-        df["status"] = df["status"].fillna("").astype(str).str.upper().str.strip()
 
         total_logs = len(df)
-        ok = int((df["status"] == "OK").sum())
-        unknown = int((df["status"] != "OK").sum())
 
         now = datetime.now()
         today_mask = (df["time"].dt.date == now.date())
         today_logs = int(today_mask.sum())
-        today_ok = int(((df["time"].dt.date == now.date()) & (df["status"] == "OK")).sum())
 
+        # Không còn status => trả về số lượng log hôm nay
         return {
             "total_logs": total_logs,
-            "ok": ok,
-            "unknown": unknown,
             "today_logs": today_logs,
-            "today_ok": today_ok,
         }
+
     except Exception:
         logger.exception("get_stats() error")
         return {
             "total_logs": 0,
-            "ok": 0,
-            "unknown": 0,
             "today_logs": 0,
-            "today_ok": 0,
         }
+
 

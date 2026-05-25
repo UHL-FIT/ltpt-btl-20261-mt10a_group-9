@@ -108,12 +108,8 @@ def get_today_attendance_stats_distinct() -> TodayAttendanceStats:
 
         for doc in logs_docs:
             data = doc.to_dict() or {}
-            msv = str(data.get("msv", "") or "").strip().upper()
+            msv = str(data.get("id", "") or "").strip().upper()
             if not msv:
-                continue
-
-            status = str(data.get("status", "") or "").strip().upper()
-            if status != "OK":
                 continue
 
             time_str = str(data.get("time", "") or "").strip()

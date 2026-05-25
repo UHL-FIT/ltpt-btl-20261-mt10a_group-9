@@ -248,22 +248,33 @@ def create_main_window() -> tuple[ctk.CTk, Dict[str, object]]:
     ui["btn_hist_refresh"] = ctk.CTkButton(filter_frame, text="Làm mới", fg_color="#28A745")
     ui["btn_hist_refresh"].grid(row=0, column=3, padx=10, pady=10)
 
+    # Export báo cáo
+    ui["btn_export_report"] = ctk.CTkButton(filter_frame, text="Xuất báo cáo", fg_color="#0ea5e9")
+    ui["btn_export_report"].grid(row=0, column=4, padx=10, pady=10)
+
+
     table_frame = ctk.CTkFrame(his, corner_radius=12)
     table_frame.pack(fill="both", expand=True, padx=18, pady=14)
 
-    # Bỏ hiển thị log_id cho đỡ rối
-    hist_cols = ["msv", "time", "status", "note"]
+    # Lịch sử chấm công: MaSV, HoTen, Lop, SĐT, Time
+    hist_cols = ["msv", "name", "class", "phone_number", "time"]
     hist_tree = ttk.Treeview(table_frame, columns=hist_cols, show="headings", height=18)
+    # độ rộng theo cột
+    col_width = {
+        "msv": 120,
+        "name": 180,
+        "class": 120,
+        "phone_number": 160,
+        "time": 240,
+    }
     for c in hist_cols:
         hist_tree.heading(c, text=c)
-        hist_tree.column(c, width=140 if c not in ("time", "note") else 240)
-
-
-
+        hist_tree.column(c, width=col_width.get(c, 140))
 
     hist_tree.pack(fill="both", expand=True)
 
     ui["tree_history"] = hist_tree
+
 
     ui["show_page"] = show_page
 
