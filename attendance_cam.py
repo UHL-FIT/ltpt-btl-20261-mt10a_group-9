@@ -163,6 +163,17 @@ def main():
         wrote_result = False
         last_face_seen_time = 0.0
 
+        # Giảm tải detect/encode để camera mượt hơn
+        detect_every_n = 3
+        frame_count = 0
+
+
+        last_face_locations = []
+        last_encodings = []
+
+
+
+
         while True:
             res, frame = cam.read()
             if (not res) or (frame is None):
@@ -183,16 +194,24 @@ def main():
             )
 
             rgb = cv.cvtColor(flipped_frame, cv.COLOR_BGR2RGB)
-            # detect faces
-            face_locations = face_recognition.face_locations(rgb)
-            # compute encodings
-            encodings = face_recognition.face_encodings(rgb, face_locations)
 
-            # Nếu có face, update last_face_seen_time
-            if face_locations:
-                last_face_seen_time = time.time()
+            # Giảm tải: chỉ detect/encode mỗi N frame, còn lại dùng kết quả cũ
+            if frame_count % detect_every_n == 0:
+                face_locations = face_recognition.face_locations(rgb)
+                encodings = face_recognition.face_encodings(rgb, face_locations)
+
+                if face_locations:
+                    last_face_seen_time = time.time()
+                    last_face_locations = face_locations
+                    last_encodings = encodings
+            else:
+                face_locations = last_face_locations
+                encodings = last_encodings
+
+            frame_count += 1
 
             for (top, right, bottom, left), enc in zip(face_locations, encodings):
+
                 # xanh lá
                 cv.rectangle(flipped_frame, (left, top), (right, bottom), (0, 255, 0), 2)
 
@@ -237,11 +256,11 @@ def main():
                         )
                         wrote_result = True
 
-                        # chờ UI hiển thị popup + user bấm OK rồi đóng camera
-                        # (UI sẽ gọi kill process hoặc đóng bằng cơ chế riêng)
-                        # Ở mức logic, ta tạm dừng loop để cửa sổ không đổi nhiều.
+                        # Chốt 1 lần duy nhất rồi dừng xử lý face trong frame này
+                        break
 
                 else:
+
                     cv.putText(
                         flipped_frame,
                         "UNKNOWN",
@@ -266,7 +285,9 @@ def main():
             # Vì hiện controller chưa có kill process, mình sẽ KHÔNG tự thoát ở đây.
             # Tuy nhiên để tránh tốn CPU, vẫn có thể giảm tốc độ.
             if wrote_result:
-                time.sleep(0.05)
+                time.sleep(0.01)
+
+
 
     except Exception:
         # báo lỗi

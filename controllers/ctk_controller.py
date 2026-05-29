@@ -128,6 +128,26 @@ def chay_ung_dung():
         sdt = ui["ent_reg_sdt"].get().strip()
         face_path = ""
 
+        # Validation: không cho phép trống bất kỳ ô nào trong bộ thông tin đăng ký
+        if not (msv and name and lop and sdt):
+            messagebox.showerror("Lỗi", "Không được để trống thông tin")
+            _set_label(ui, "lbl_reg_status", "Trạng thái: lỗi - Không được để trống thông tin")
+            return
+
+        # Check MSV đã tồn tại trong collection register chưa
+        try:
+            df_students = face_attendance.load_students()
+        except Exception as e:
+            messagebox.showerror("Lỗi", str(e))
+            _set_label(ui, "lbl_reg_status", f"Trạng thái: lỗi - {e}")
+            return
+
+        if df_students is not None and not df_students.empty and (df_students["msv"] == msv).any():
+            messagebox.showerror("Lỗi", "Mã sinh viên đã tồn tại")
+            _set_label(ui, "lbl_reg_status", "Trạng thái: lỗi - Mã sinh viên đã tồn tại")
+            return
+
+        # Lưu sinh viên mới
         ok, msg = face_attendance.add_student({"msv": msv, "ho_ten": name, "lop": lop, "sdt": sdt, "face_path": face_path})
 
         if not ok:
@@ -135,8 +155,10 @@ def chay_ung_dung():
             _set_label(ui, "lbl_reg_status", f"Trạng thái: lỗi - {msg}")
             return
 
-        _set_label(ui, "lbl_reg_status", f"Trạng thái: OK - {msg}")
         messagebox.showinfo("Thành công", msg)
+        _set_label(ui, "lbl_reg_status", f"Trạng thái: OK - {msg}")
+
+
 
     def on_register_face():
         """Mở camera standalone để chụp 1 ảnh đăng ký theo MSV.
@@ -196,6 +218,14 @@ def chay_ung_dung():
 
         _set_label(ui, "lbl_reg_status", f"Trạng thái: OK - đã đăng ký khuôn mặt")
         messagebox.showinfo("Thành công", msg)
+
+        # Reset các ô nhập thông tin đăng ký sau khi người dùng bấm OK
+        ui["ent_reg_msv"].delete(0, tk.END)
+        ui["ent_reg_name"].delete(0, tk.END)
+        ui["ent_reg_lop"].delete(0, tk.END)
+        ui["ent_reg_sdt"].delete(0, tk.END)
+        _set_label(ui, "lbl_reg_status", "Trạng thái: sẵn sàng")
+
 
     def on_refresh_stats():
         _refresh_stats(ui)

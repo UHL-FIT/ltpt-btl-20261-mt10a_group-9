@@ -34,6 +34,9 @@ def main():
     # Biến phục vụ việc giảm tải cho CPU (Bỏ khung hình)
     frame_count = 0
     face_locations = []
+    last_detected = []
+    detect_every_n = 3  # giảm tải CPU để preview mượt hơn
+
 
 
     try:
@@ -51,13 +54,19 @@ def main():
                 flipped_frame = cv.flip(frame, 1)
                 display_frame = flipped_frame.copy()
 
-                # SỬA LỖI 1: Cứ 4 khung hình mới quét mặt 1 lần bằng AI để camera mượt mà
-                if frame_count % 4 == 0:
-                    # Chuyển đổi hệ màu sang RGB phục vụ face_recognition
+                # Giảm tải: chỉ detect mặt mỗi N frame, các frame còn lại dùng kết quả cũ
+                if frame_count % detect_every_n == 0:
                     rgb_frame = cv.cvtColor(display_frame, cv.COLOR_BGR2RGB)
                     face_locations = face_recognition.face_locations(rgb_frame)
+                    if face_locations:
+                        last_detected = face_locations
+
+                # Nếu chưa detect được ở frame hiện tại thì dùng last_detected để khung hiển thị ổn định
+                if not face_locations and last_detected:
+                    face_locations = last_detected
 
                 frame_count += 1
+
 
                 # Vẽ khung chữ nhật xanh xung quanh mặt từ dữ liệu đã quét
                 for (top, right, bottom, left) in face_locations:
@@ -69,7 +78,7 @@ def main():
 
                 # 4. Bắt sự kiện phím bấm
                 key = cv.waitKey(1) & 0xFF
-                # Nếu nhấn 's' và có mặt trong khung hình -> Lưu ảnh và thoát
+                # Nếu nhấn 's' và có mặt (dựa trên last_detected) -> Lưu ảnh và thoát
                 if key == ord('s') or key == ord('S'):  # Nhận diện cả chữ hoa và chữ thường
                     if len(face_locations) > 0:
                         filename = output_path
@@ -81,6 +90,7 @@ def main():
                         break
                     else:
                         print("Khong tim thay khuon mat trong khung hinh, vui long thu lai!")
+
 
                 # Nếu nhấn 'q' -> Hủy bỏ, tắt cam đi ra
                 elif key == ord('q') or key == ord('Q'):
