@@ -4,11 +4,9 @@ import os
 import argparse
 import sys
 
-
-def _ensure_dataset_dir(data_dir: str) -> None:
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-
+def ensure_dataset_dir(dataset_dir: str) -> None:
+    if not os.path.exists(dataset_dir):
+        os.makedirs(dataset_dir)
 
 def main():
     parser = argparse.ArgumentParser(description="Capture 1 face image for registration")
@@ -23,7 +21,7 @@ def main():
 
     # Tạo thư mục chứa dataset nếu chưa có
     data_dir = "dataset"
-    _ensure_dataset_dir(data_dir)
+    ensure_dataset_dir(data_dir)
 
     output_path = os.path.join(data_dir, f"{msv}.jpg")
 
@@ -36,8 +34,6 @@ def main():
     face_locations = []
     last_detected = []
     detect_every_n = 3  # giảm tải CPU để preview mượt hơn
-
-
 
     try:
         if not cam.isOpened():
@@ -90,7 +86,6 @@ def main():
                         break
                     else:
                         print("Khong tim thay khuon mat trong khung hinh, vui long thu lai!")
-
 
                 # Nếu nhấn 'q' -> Hủy bỏ, tắt cam đi ra
                 elif key == ord('q') or key == ord('Q'):

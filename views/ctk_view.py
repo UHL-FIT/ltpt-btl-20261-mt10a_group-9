@@ -62,6 +62,14 @@ def create_main_window() -> tuple[ctk.CTk, dict[str, object]]:
     ui["btn_nav_stats"].pack(pady=8, padx=14)
     ui["btn_nav_history"].pack(pady=8, padx=14)
 
+    ui["btn_about"] = ctk.CTkButton(sidebar, text="ℹ Giới thiệu", fg_color="#FF8C00")
+    ui["btn_about"].pack(side="bottom", pady=20, padx=14)
+
+    ui["btn_help"] = ctk.CTkButton(sidebar, text="? Hướng dẫn", fg_color="#22C55E")
+    ui["btn_help"].pack(side="bottom", pady=8, padx=14)
+
+
+
     # ---------------- Attendance Page ----------------
     att = pages["attendance"]
 
@@ -151,20 +159,20 @@ def create_main_window() -> tuple[ctk.CTk, dict[str, object]]:
     # -------- Left Frame --------
     ctk.CTkLabel(left_reg, text="Đăng ký chấm công", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(18,0))
 
-    # 1. Tạo frame nhập thông tin
+    # Tạo frame nhập thông tin
     reg_form = ctk.CTkFrame(left_reg, corner_radius=12)
     reg_form.pack(fill="both", expand=True, padx=14, pady=8)
 
-    # 🔥 2. THÊM CÁC DÒNG NÀY ĐỂ ĐẨY TOÀN BỘ VÀO GIỮA TÂM:
+    # Đẩy vùng các ô nhập thông tin ra giữa
     reg_form.grid_columnconfigure(0, weight=1)  # Cân bằng cột bên trái
     reg_form.grid_columnconfigure(1, weight=1)  # Cân bằng cột bên phải
     
     # Cho tất cả 7 hàng tự co giãn để ép cụm nhập liệu vào giữa theo chiều dọc
-    for i in range(7):
+    for i in range(8):
         reg_form.grid_rowconfigure(i, weight=1)
-    # ----------------------------------------------------
 
-    # 3. Các ô nhập liệu (Có chỉnh sửa lại padx để thụt lề 2 bên cho cân đối)
+
+    # Các ô nhập liệu (Có chỉnh sửa lại padx để thụt lề 2 bên cho cân đối)
     ctk.CTkLabel(reg_form, text="MSV:").grid(row=0, column=0, sticky="w", padx=(50, 10), pady=8)
     ui["ent_reg_msv"] = ctk.CTkEntry(reg_form, width=260)
     ui["ent_reg_msv"].grid(row=0, column=1, sticky="w", padx=(10, 50), pady=8)
@@ -181,15 +189,21 @@ def create_main_window() -> tuple[ctk.CTk, dict[str, object]]:
     ui["ent_reg_sdt"] = ctk.CTkEntry(reg_form, width=260)
     ui["ent_reg_sdt"].grid(row=3, column=1, sticky="w", padx=(10, 50), pady=8)
 
-    # 4. Các nút bấm và Trạng thái (Sửa lại padx để thụt lề đồng bộ với ô nhập)
+    # Các nút bấm và Trạng thái (Sửa lại padx để thụt lề đồng bộ với ô nhập)
     ui["btn_register_student"] = ctk.CTkButton(reg_form, text="Lưu thông tin", fg_color="#1E90FF")
     ui["btn_register_student"].grid(row=4, column=0, columnspan=2, padx=50, pady=10, sticky="ew")
 
     ui["btn_register_face"] = ctk.CTkButton(reg_form, text="Đăng ký", fg_color="#A020F0")
     ui["btn_register_face"].grid(row=5, column=0, columnspan=2, padx=50, pady=6, sticky="ew")
 
+    # Nút Xóa sinh viên
+    ui["btn_delete_student"] = ctk.CTkButton(reg_form, text="Xóa sinh viên", fg_color="#EF4444")
+    ui["btn_delete_student"].grid(row=6, column=0, columnspan=2, padx=50, pady=6, sticky="ew")
+
     ui["lbl_reg_status"] = ctk.CTkLabel(reg_form, text="Trạng thái: sẵn sàng", anchor="w")
-    ui["lbl_reg_status"].grid(row=6, column=0, columnspan=2, padx=50, pady=(12, 0), sticky="w")
+
+    ui["lbl_reg_status"].grid(row=7, column=0, columnspan=2, padx=50, pady=(12, 0), sticky="w")
+
     
     # ---------------- Right Frame ----------------
     ui["frame_camera"] = ctk.CTkFrame(

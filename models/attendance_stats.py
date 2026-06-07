@@ -1,20 +1,13 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, date
-from typing import Dict, Optional, Tuple
-
 import pandas as pd
-
 from utils.logger import setup_logger
-
 import os
 import sys
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 logger = setup_logger("attendance_stats")
-
 
 def _get_base_dir() -> str:
     if getattr(sys, "frozen", False):
@@ -39,9 +32,7 @@ except Exception:
     except Exception:
         pass
 
-
 db = firestore.client()
-
 
 @dataclass(frozen=True)
 class TodayAttendanceStats:
@@ -61,7 +52,7 @@ class TodayAttendanceStats:
             return 0.0
         return (self.today_unmarked / self.registered_total) * 100.0
 
-    def to_dict(self) -> Dict[str, float | int]:
+    def to_dict(self) -> dict[str, float | int]:
         return {
             "registered_total": self.registered_total,
             "today_marked": self.today_marked,
@@ -71,7 +62,7 @@ class TodayAttendanceStats:
         }
 
 
-def _parse_date_bounds(d: date) -> Tuple[datetime, datetime]:
+def _parse_date_bounds(d: date) -> tuple[datetime, datetime]:
     start_dt = datetime.combine(d, datetime.min.time())
     end_dt = datetime.combine(d, datetime.max.time())
     return start_dt, end_dt

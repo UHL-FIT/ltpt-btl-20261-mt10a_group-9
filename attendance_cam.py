@@ -3,24 +3,17 @@ import os
 import json
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
-
 import face_recognition
-
 from models import face_attendance
 
-
-def _get_base_dir() -> str:
-    # Repo root
+def get_base_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
-
-BASE_DIR = _get_base_dir()
+BASE_DIR = get_base_dir()
 DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 LAST_ATTENDANCE_JSON = os.path.join(DATA_DIR, "last_attendance.json")
-
 
 def _safe_read_json(path: str) -> Optional[dict]:
     try:
@@ -30,7 +23,6 @@ def _safe_read_json(path: str) -> Optional[dict]:
             return json.load(f)
     except Exception:
         return None
-
 
 def _safe_write_json(path: str, payload: dict) -> None:
     tmp_path = path + ".tmp"
@@ -167,12 +159,8 @@ def main():
         detect_every_n = 3
         frame_count = 0
 
-
         last_face_locations = []
         last_encodings = []
-
-
-
 
         while True:
             res, frame = cam.read()
@@ -287,8 +275,6 @@ def main():
             if wrote_result:
                 time.sleep(0.01)
 
-
-
     except Exception:
         # báo lỗi
         _safe_write_json(
@@ -304,7 +290,6 @@ def main():
             cv.destroyAllWindows()
         except Exception:
             pass
-
 
 if __name__ == "__main__":
     main()

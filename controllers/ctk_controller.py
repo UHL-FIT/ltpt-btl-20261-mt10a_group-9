@@ -1,56 +1,31 @@
+import sys
+import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from utils.logger import setup_logger
 from models import face_attendance
 import views.ctk_view as ctk_view
-import sys
-import os
+
 logger = setup_logger("ctk_controller")
 
-def _set_label(ui, key: str, text: str):
-    lbl = ui.get(key)
-    if lbl is not None:
+def set_label(ui: dict, key: str, txt: str) -> None:
+    label = ui.get(key)
+    if label is not None:
         try:
-            lbl.configure(text=text)
+            label.configure(text=txt)
         except Exception:
             pass
 
-def _clear_tree(tree):
+def clear_tree(tree) -> None:
     for item in tree.get_children():
         tree.delete(item)
 
-def _load_recent_logs(ui, limit: int = 10):
-    # Không còn tree_recent_logs trong Attendance UI mới
-    if "tree_recent_logs" not in ui:
-        return
-
-    tree = ui["tree_recent_logs"]
-
-    _clear_tree(tree)
-    df = face_attendance.get_history()
-    if df is None or df.empty:
-        return
-    df = df.head(limit)
-    for _, row in df.iterrows():
-        tree.insert(
-            "",
-            tk.END,
-            values=[
-                row.get("msv", ""),
-                row.get("name", ""),
-                row.get("class", ""),
-                row.get("phone_number", ""),
-                row.get("time", ""),
-            ],
-        )
-
-
-def _load_history(ui, msv_filter: str = ""):
+# Hiển thị dữ liệu lịch sử chấm công lên bảng
+def load_history(ui: dict, msv_filter: str = "") -> None:
     tree = ui["tree_history"]
-    _clear_tree(tree)
+    clear_tree(tree)
     df = face_attendance.get_history(msv=msv_filter)
-    if df is None or df.empty:
-        return
+    if df is None or df.empty: return
 
     for _, row in df.iterrows():
         tree.insert(
@@ -65,9 +40,8 @@ def _load_history(ui, msv_filter: str = ""):
             ],
         )
 
-
-def _refresh_stats(ui):
-    """Refresh stats page charts + KPI."""
+# Làm mới biểu đồ và dữ liệu thống kê
+def refresh_stats(ui) -> None:
     try:
         from models.attendance_stats import get_today_attendance_stats_distinct
         from views.stats_charts import make_bar_pie_figures
@@ -117,34 +91,40 @@ def _refresh_stats(ui):
         except Exception:
             pass
 
-def chay_ung_dung():
+def chay_ung_dung() -> None:
+    # Gọi hàm vẽ giao diện UI
     root, ui = ctk_view.create_main_window()
 
+    # ---------- Initial load ----------
+    load_history(ui)
+    refresh_stats(ui)
+
     # ---------- Xử lý sự kiện cho các Button ----------
-    def on_register_student():
+    # Button lưu thông tin đăng kí 
+    def on_register_student() -> None:
         msv = ui["ent_reg_msv"].get().strip().upper()
         name = ui["ent_reg_name"].get().strip()
         lop = ui["ent_reg_lop"].get().strip()
         sdt = ui["ent_reg_sdt"].get().strip()
         face_path = ""
 
-        # Validation: không cho phép trống bất kỳ ô nào trong bộ thông tin đăng ký
+        # Validation: không được để trống thông tin
         if not (msv and name and lop and sdt):
-            messagebox.showerror("Lỗi", "Không được để trống thông tin")
-            _set_label(ui, "lbl_reg_status", "Trạng thái: lỗi - Không được để trống thông tin")
+            messagebox.showerror("Lỗi", "Không được để trống thông tin!")
+            set_label(ui, "lbl_reg_status", "Trạng thái: Lỗi - Không được để trống thông tin!")
             return
 
-        # Check MSV đã tồn tại trong collection register chưa
+        # Chống trùng mã sinh viên
         try:
             df_students = face_attendance.load_students()
         except Exception as e:
             messagebox.showerror("Lỗi", str(e))
-            _set_label(ui, "lbl_reg_status", f"Trạng thái: lỗi - {e}")
+            set_label(ui, "lbl_reg_status", f"Trạng thái: lỗi - {e}")
             return
 
         if df_students is not None and not df_students.empty and (df_students["msv"] == msv).any():
-            messagebox.showerror("Lỗi", "Mã sinh viên đã tồn tại")
-            _set_label(ui, "lbl_reg_status", "Trạng thái: lỗi - Mã sinh viên đã tồn tại")
+            messagebox.showerror("Lỗi", "Mã sinh viên đã tồn tại!")
+            set_label(ui, "lbl_reg_status", "Trạng thái: lỗi - Mã sinh viên đã tồn tại!")
             return
 
         # Lưu sinh viên mới
@@ -152,30 +132,24 @@ def chay_ung_dung():
 
         if not ok:
             messagebox.showerror("Lỗi", msg)
-            _set_label(ui, "lbl_reg_status", f"Trạng thái: lỗi - {msg}")
+            set_label(ui, "lbl_reg_status", f"Trạng thái: lỗi - {msg}")
             return
 
         messagebox.showinfo("Thành công", msg)
-        _set_label(ui, "lbl_reg_status", f"Trạng thái: OK - {msg}")
+        set_label(ui, "lbl_reg_status", f"Trạng thái: OK - {msg}")
 
-
-
-    def on_register_face():
-        """Mở camera standalone để chụp 1 ảnh đăng ký theo MSV.
-
-        Luồng:
-        - Lấy MSV từ ent_reg_msv
-        - Mở test_cam.py bằng subprocess, truyền --msv
-        - Người dùng nhấn 's' trong cửa sổ cam để lưu ảnh
-        - Sau khi subprocess kết thúc: update face_path trong CSV.
-        """
+    # Button đăng kí khuôn mặt 
+    def on_register_face() -> None:
         import subprocess
         import os
         import sys
 
         msv = ui["ent_reg_msv"].get().strip().upper()
-        if not msv:
-            messagebox.showwarning("Thiếu dữ liệu", "Vui lòng nhập MSV trước khi đăng ký khuôn mặt")
+        name = ui["ent_reg_name"].get().strip()
+        lop = ui["ent_reg_lop"].get().strip()
+        sdt = ui["ent_reg_sdt"].get().strip()
+        if not (msv and name and lop and sdt):
+            messagebox.showwarning("Thiếu dữ liệu", "Vui lòng nhập thông tin và lưu trước khi đăng ký khuôn mặt!")
             return
 
         # Kiểm tra MSV đã tồn tại trong CSDL
@@ -183,7 +157,7 @@ def chay_ung_dung():
         if df_students is None or df_students.empty or not (df_students["msv"] == msv).any():
             messagebox.showwarning(
                 "Chưa có sinh viên",
-                "Vui lòng bấm 'Lưu sinh viên' trước khi 'Đăng ký khuôn mặt'.",
+                "Vui lòng bấm 'Lưu thông tin' trước khi 'Đăng ký khuôn mặt'!",
             )
             return
 
@@ -216,7 +190,7 @@ def chay_ung_dung():
             messagebox.showerror("Lỗi", msg)
             return
 
-        _set_label(ui, "lbl_reg_status", f"Trạng thái: OK - đã đăng ký khuôn mặt")
+        set_label(ui, "lbl_reg_status", f"Trạng thái: OK - đã đăng ký khuôn mặt")
         messagebox.showinfo("Thành công", msg)
 
         # Reset các ô nhập thông tin đăng ký sau khi người dùng bấm OK
@@ -224,31 +198,79 @@ def chay_ung_dung():
         ui["ent_reg_name"].delete(0, tk.END)
         ui["ent_reg_lop"].delete(0, tk.END)
         ui["ent_reg_sdt"].delete(0, tk.END)
-        _set_label(ui, "lbl_reg_status", "Trạng thái: sẵn sàng")
+        set_label(ui, "lbl_reg_status", "Trạng thái: sẵn sàng")
 
+    # Button xóa sinh viên
+    def on_delete_student() -> None:
+        # Popup nhập MSV cần xóa
+        delete_win = tk.Toplevel(root)
+        delete_win.title("Xóa sinh viên")
+        delete_win.geometry("420x240")
+        delete_win.resizable(False, False)
+        delete_win.transient(root)
+        delete_win.grab_set()
 
-    def on_refresh_stats():
-        _refresh_stats(ui)
+        tk.Label(delete_win, text="Nhập MSV cần xóa:", font=("Arial", 12)).pack(pady=(18, 8))
+        ent_msv = tk.Entry(delete_win, width=30)
+        ent_msv.pack(pady=6)
 
-    def on_hist_refresh():
+        def do_cancel() -> None:
+            try:
+                delete_win.destroy()
+            except Exception:
+                pass
+
+        def do_confirm() -> None:
+            msv = ent_msv.get().strip().upper()
+            if not msv:
+                messagebox.showwarning("Thiếu dữ liệu", "Vui lòng nhập MSV cần xóa.")
+                return
+
+            ok, msg = face_attendance.delete_student(msv)
+            if not ok:
+                messagebox.showerror("Xóa thất bại", msg)
+                return
+
+            messagebox.showinfo("Thành công", msg)
+            try:
+                delete_win.destroy()
+            except Exception:
+                pass
+
+            set_label(ui, "lbl_reg_status", "Trạng thái: sẵn sàng")
+
+        btn_row = tk.Frame(delete_win)
+        btn_row.pack(pady=16)
+
+        tk.Button(btn_row, text="Hủy", width=12, command=do_cancel).pack(side="left", padx=10)
+        tk.Button(btn_row, text="Xác nhận", width=12, command=do_confirm).pack(side="left", padx=10)
+
+    # Button làm mới biểu đồ và dữ liệu thống kê
+    def on_refresh_stats() -> None:
+        refresh_stats(ui)
+
+    # Button làm mới bảng lịch sử chấm công
+    def on_hist_refresh() -> None:
         ui["ent_hist_msv"].delete(0, tk.END)
-        _load_history(ui, msv_filter="")
+        load_history(ui, msv_filter="")
 
-    def on_hist_filter():
+    # Button lọc theo mã sinh viên
+    def on_hist_filter() -> None:
         msv = ui["ent_hist_msv"].get().strip()
-        _load_history(ui, msv_filter=msv)
+        load_history(ui, msv_filter=msv)
 
-    def on_start_attendance():
+    # Button chấm công
+    def on_start_attendance() -> None:
         import subprocess
         import os
         import json
 
         # Reset khung bên phải ngay khi bắt đầu lượt chấm công
-        _set_label(ui, "lbl_msv", "---")
-        _set_label(ui, "lbl_hoten", "---")
-        _set_label(ui, "lbl_lop", "---")
-        _set_label(ui, "lbl_sdt", "---")
-        _set_label(ui, "lbl_thoigian", "---")
+        set_label(ui, "lbl_msv", "---")
+        set_label(ui, "lbl_hoten", "---")
+        set_label(ui, "lbl_lop", "---")
+        set_label(ui, "lbl_sdt", "---")
+        set_label(ui, "lbl_thoigian", "---")
 
         root_dir = os.path.dirname(os.path.abspath(__file__))
         repo_root = os.path.abspath(os.path.join(root_dir, ".."))
@@ -260,8 +282,7 @@ def chay_ung_dung():
 
         last_json_path = os.path.join(repo_root, "data", "last_attendance.json")
         try:
-            if os.path.exists(last_json_path):
-                os.remove(last_json_path)
+            if os.path.exists(last_json_path): os.remove(last_json_path)
         except Exception:
             pass
 
@@ -296,21 +317,14 @@ def chay_ung_dung():
                 sdt = str(payload.get("sdt", "")).strip()
                 t_str = str(payload.get("time", "")).strip()
 
-                if msv:
-                    _set_label(ui, "lbl_msv", msv)
-                if ho_ten:
-                    _set_label(ui, "lbl_hoten", ho_ten)
-                if lop:
-                    _set_label(ui, "lbl_lop", lop)
-                if sdt:
-                    _set_label(ui, "lbl_sdt", sdt)
-                if t_str:
-                    _set_label(ui, "lbl_thoigian", t_str)
-
-                if st == "SUCCESS":
-                    messagebox.showinfo("Thành công", "Chấm công thành công")
-                elif st == "ALREADY_MARKED_TODAY":
-                    messagebox.showinfo("Thông báo", "Đã chấm công hôm nay")
+                if msv: set_label(ui, "lbl_msv", msv)
+                if ho_ten: set_label(ui, "lbl_hoten", ho_ten)
+                if lop: set_label(ui, "lbl_lop", lop)                   
+                if sdt: set_label(ui, "lbl_sdt", sdt)
+                if t_str: set_label(ui, "lbl_thoigian", t_str)
+                    
+                if st == "SUCCESS": messagebox.showinfo("Thông báo", "Chấm công thành công!")
+                elif st == "ALREADY_MARKED_TODAY": messagebox.showinfo("Thông báo", "Đã chấm công hôm nay!")
                 else:
                     # Includes ERROR or UNKNOWN
                     err = payload.get("error") or payload.get("message") or "Nhận diện thất bại"
@@ -336,16 +350,66 @@ def chay_ung_dung():
 
         poll_once()
 
-    
-    ui["btn_start_attendance"].configure(command=on_start_attendance)
+    # Button Hướng dẫn
+    def on_help() -> None:
+        try:
+            import os
+            import sys
+            # Đường dẫn file hướng dẫn nằm cùng cấp với main.py
+            root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            help_path = os.path.join(root_dir, "HDSD.pdf")
 
-    ui["btn_register_student"].configure(command=on_register_student)
+            if not os.path.exists(help_path):
+                messagebox.showerror("Không tìm thấy file", f"Không thấy HDSD.pdf tại:\n{help_path}")
+                return
 
-    ui["btn_register_face"].configure(command=on_register_face)
+            # Mở bằng ứng dụng mặc định của Windows
+            os.startfile(help_path)  # type: ignore[attr-defined]
+        except Exception as e:
+            try:
+                messagebox.showerror("Lỗi", str(e))
+            except Exception:
+                pass
 
-    ui["btn_refresh_stats"].configure(command=on_refresh_stats)
+    # Button Giới thiệu
+    def on_about() -> None:
 
-    def on_export_report():
+        import customtkinter as ctk
+        about_win = ctk.CTkToplevel(root)
+        about_win.title("Giới thiệu")
+        about_win.geometry("480x300")
+        about_win.resizable(False, False)
+        about_win.transient(root)
+        about_win.grab_set()
+
+        main_frame = ctk.CTkFrame(about_win, corner_radius=12)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Container cho thông tin
+        info_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        info_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Icon tròn giả lập (chữ i màu xanh)
+        ctk.CTkLabel(info_frame, text="ℹ", font=ctk.CTkFont(size=48), text_color="#1E90FF").pack(side="left", padx=(10, 20), anchor="n")
+        
+        text_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
+        text_frame.pack(side="left", fill="both", expand=True)
+
+        ctk.CTkLabel(text_frame, text="PHẦN MỀM: SMARTATTEND", font=ctk.CTkFont(size=14, weight="bold"), anchor="w").pack(fill="x")
+        ctk.CTkLabel(text_frame, text="---------------------------------------------------", text_color="gray", anchor="w").pack(fill="x", pady=2)
+        ctk.CTkLabel(text_frame, text="• Phiên bản: 1.0.0", anchor="w").pack(fill="x")
+        ctk.CTkLabel(text_frame, text="• Tác giả: ThS. Vũ Duy Sơn", anchor="w").pack(fill="x")
+        ctk.CTkLabel(text_frame, text="• Đơn vị: Trường Đại học Hạ Long (UHL)", anchor="w").pack(fill="x")
+        ctk.CTkLabel(text_frame, text="• Ngày phát hành: 03/05/2026", anchor="w").pack(fill="x")
+        ctk.CTkLabel(text_frame, text="---------------------------------------------------", text_color="gray", anchor="w").pack(fill="x", pady=2)
+        
+        ctk.CTkLabel(text_frame, text="Phần mềm hỗ trợ quản lý sinh viên và điểm danh chuyên cần tự động.", wraplength=280, justify="left", anchor="w").pack(fill="x")
+
+        # Nút OK
+        ctk.CTkButton(main_frame, text="OK", width=80, fg_color="transparent", border_width=1, text_color=("black", "white"), hover_color=("#e5e5e5", "#333333"), command=about_win.destroy).pack(side="bottom", anchor="e", pady=(0, 10), padx=10)
+
+    # Button xuất báo cáo 
+    def on_export_report() -> None:
         # Export toàn bộ logs: msv, time, status, note
         try:
             import customtkinter as ctk
@@ -555,23 +619,39 @@ def chay_ung_dung():
             except Exception:
                 pass
 
+    #------- Gắn xử lý sự kiện cho các button -------
+    # Button chấm công
+    ui["btn_start_attendance"].configure(command=on_start_attendance)
+
+    # Button lưu thông tin đăng kí
+    ui["btn_register_student"].configure(command=on_register_student)
+
+    # Button lưu khuôn mặt đăng kí
+    ui["btn_register_face"].configure(command=on_register_face)
+
+    # Button làm mới dữ liệu thống kê
+    ui["btn_refresh_stats"].configure(command=on_refresh_stats)
+
+    # Button xóa sinh viên
+    ui["btn_delete_student"].configure(command=on_delete_student)
+
+    # Button Hướng dẫn
+    if "btn_help" in ui:
+        ui["btn_help"].configure(command=on_help)
+
+    # Button làm mới bảng lịch sử chấm công
     ui["btn_hist_refresh"].configure(command=on_hist_refresh)
 
+
+    # Button lọc bảng lịch sử chấm công theo mã sinh viên
     ui["btn_hist_filter"].configure(command=on_hist_filter)
 
-    # Xuất báo cáo (toàn bộ logs) nằm trong tab lịch sử
-    ui["btn_export_report"] = ui.get("btn_export_report")
-    if ui.get("btn_export_report") is not None:
-        ui["btn_export_report"].configure(command=on_export_report)
-    else:
-        # nếu UI chưa có nút export thì không crash
-        pass
+    # Button xuất báo cáo
+    ui["btn_export_report"].configure(command=on_export_report)
 
-    # ---------- Initial load ----------
-    _load_recent_logs(ui)
-    _load_history(ui)
-    _refresh_stats(ui)
-
+    # Button Giới thiệu
+    if "btn_about" in ui:
+        ui["btn_about"].configure(command=on_about)
 
     root.mainloop()
 

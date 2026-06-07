@@ -1,7 +1,6 @@
 import os
 import sys
 from datetime import datetime, date
-from typing import Dict, Optional, Tuple
 import pandas as pd
 from utils.logger import setup_logger
 import firebase_admin
@@ -9,19 +8,20 @@ from firebase_admin import credentials, firestore
 
 logger = setup_logger("face_attendance")
 
-def _get_base_dir() -> str:
-    # Khi chạy source trực tiếp: base_dir là repo root (nơi models/ nằm trong).
-    # Khi build exe (frozen): để đơn giản ta vẫn ghi/đọc ở thư mục data/ cạnh executable.
+# Xác định đường dẫn thư mục gốc của project
+def get_base_dir() -> str:
+    # Kiểm tra xem chương trình có đang chạy dưới dạng file exe không
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(__file__))
 
-FIREBASE_KEY_JSON = os.path.join(_get_base_dir(), "firebase_key.json")
-cred = credentials.Certificate(FIREBASE_KEY_JSON)
-firebase_admin.initialize_app(cred)
+# Cấu hình và kết nối đến Firestore
+FIREBASE_KEY_JSON = os.path.join(get_base_dir(), "firebase_key.json")
+cre = credentials.Certificate(FIREBASE_KEY_JSON)
+firebase_admin.initialize_app(cre)
 db = firestore.client()
 
-BASE_DIR = _get_base_dir()
+BASE_DIR = get_base_dir()
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 FACE_STUDENTS_CSV = os.path.join(DATA_DIR, "face_students.csv")
@@ -45,10 +45,10 @@ def load_students() -> pd.DataFrame:
             )
 
         df = pd.DataFrame(rows)
+        # Kiếm tra xem df có rỗng không
         if df.empty:
-            # Đảm bảo DataFrame có đủ cột để tránh lỗi khi dùng iterrows/ get
             return pd.DataFrame(columns=["msv", "ho_ten", "lop", "sdt", "face_path"])
-
+        
         df = df.fillna("")
         df["msv"] = df["msv"].astype(str).str.strip().str.upper()
         return df
@@ -57,9 +57,8 @@ def load_students() -> pd.DataFrame:
         logger.exception("load_students() firestore error")
         return pd.DataFrame(columns=["msv", "ho_ten", "lop", "sdt", "face_path"])
 
-
-# Thêm sinh viên vào database, cụ thể là collection "register"
-def add_student(student: Dict[str, str]) -> Tuple[bool, str]:
+# Thêm sinh viên vào collection "register"
+def add_student(student: dict[str, str]) -> tuple[bool, str]:
     # student: {msv, ho_ten, lop, sdt, face_path}
     msv = str(student.get("msv", "")).strip().upper()
     ho_ten = str(student.get("ho_ten", "")).strip()
@@ -76,9 +75,7 @@ def add_student(student: Dict[str, str]) -> Tuple[bool, str]:
     try:
         doc_ref = db.collection("register").document(msv)
         doc = doc_ref.get()
-
         if doc.exists: return False, "MSV đã tồn tại"
-
         doc_ref.set(
             {
                 "name": ho_ten,
@@ -94,17 +91,8 @@ def add_student(student: Dict[str, str]) -> Tuple[bool, str]:
         logger.exception("add_student() error")
         return False, "Lỗi khi thêm sinh viên" 
 
-
 # Cập nhật thông tin sinh viên trong database
-def update_student(msv: str, update: Dict[str, str]) -> Tuple[bool, str]:
-    """Update thông tin sinh viên trong Firestore.
-
-    update có thể chứa các key:
-    - ho_ten -> name
-    - lop -> class
-    - sdt -> phone_number
-    - face_path -> face_path
-    """
+def update_student(msv: str, update: dict[str, str]) -> tuple[bool, str]:
     msv = str(msv).strip().upper()
     if not msv:
         return False, "MSV không hợp lệ"
@@ -115,7 +103,7 @@ def update_student(msv: str, update: Dict[str, str]) -> Tuple[bool, str]:
         if not doc.exists:
             return False, "Không tìm thấy MSV"
 
-        payload: Dict[str, str] = {}
+        payload: dict[str, str] = {}
         if "ho_ten" in update:
             payload["name"] = str(update.get("ho_ten", "") or "").strip()
         if "lop" in update:
@@ -136,7 +124,7 @@ def update_student(msv: str, update: Dict[str, str]) -> Tuple[bool, str]:
         return False, "Lỗi khi cập nhật"
 
 # Xóa sinh viên trong databse
-def delete_student(msv: str) -> Tuple[bool, str]:
+def delete_student(msv: str) -> tuple[bool, str]:
     msv = str(msv).strip().upper()
     if not msv:
         return False, "MSV không hợp lệ"
@@ -153,17 +141,7 @@ def delete_student(msv: str) -> Tuple[bool, str]:
         logger.exception("delete_student() error")
         return False, "Lỗi khi xoá"
 
-
-def register_face(msv: str, face_path: str = "") -> Tuple[bool, str]:
-    """Liên kết ảnh khuôn mặt với sinh viên theo MSV.
-
-    Args:
-        msv: Mã sinh viên.
-        face_path: Đường dẫn ảnh khuôn mặt (vd: dataset/SV001.jpg)
-
-    Returns:
-        (ok, msg)
-    """
+def register_face(msv: str, face_path: str = "") -> tuple[bool, str]:
     msv = str(msv).strip().upper()
     face_path = str(face_path).strip()
 
@@ -178,9 +156,8 @@ def register_face(msv: str, face_path: str = "") -> Tuple[bool, str]:
     ok, msg = update_student(msv, {"face_path": face_path})
     return ok, msg
 
-
 # Thêm dòng log vào Firestore collection "logs"
-def do_attendance(msv: str, status: str = "OK", note: str = "") -> Tuple[bool, str]:
+def do_attendance(msv: str, status: str = "OK", note: str = "") -> tuple[bool, str]:
     """Ghi 1 bản ghi chấm công vào collection `logs`.
 
     Đồng bộ với tab Lịch sử mong muốn (không hiển thị status/note):
@@ -193,7 +170,6 @@ def do_attendance(msv: str, status: str = "OK", note: str = "") -> Tuple[bool, s
       nhưng sẽ KHÔNG ghi chúng vào `logs`.
     """
     msv = str(msv).strip().upper()
-
     if not msv:
         return False, "MSV không hợp lệ"
 
@@ -203,10 +179,8 @@ def do_attendance(msv: str, status: str = "OK", note: str = "") -> Tuple[bool, s
             return False, "Không tồn tại MSV"
 
         reg_data = reg_doc.to_dict() or {}
-
         db.collection("logs").add(
             {
-                # theo yêu cầu của bạn: field `id` trong logs là mã SV
                 "id": msv,
                 "name": str(reg_data.get("name", "") or "").strip(),
                 "class": str(reg_data.get("class", "") or "").strip(),
@@ -214,47 +188,22 @@ def do_attendance(msv: str, status: str = "OK", note: str = "") -> Tuple[bool, s
                 "time": datetime.now().isoformat(timespec="seconds"),
             }
         )
-        return True, "Đã chấm công"
+        return True, "Chấm công thành công!"
 
     except Exception:
         logger.exception("do_attendance() error")
         return False, "Lỗi khi chấm công"
 
-
-def _parse_time_series(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    df = df.copy()
-    df["time"] = pd.to_datetime(df["time"], errors="coerce")
-    return df
-
-
-"""Lấy lịch sử chấm công từ collection `logs`.
-
-Trả về DataFrame với các cột:
-- log_id: document id (đúng theo yêu cầu bạn nói: MaSV lấy từ id)
-- msv: alias của log_id
-- name: họ tên
-- class: lớp
-- phone_number: SĐT
-- time: thời gian
-
-Các cột status/note giữ lại nếu Firestore có.
-"""
-
-def get_history(start: Optional[date] = None, end: Optional[date] = None, msv: str = "") -> pd.DataFrame:
+# Lấy dữ liệu từ Collection "logs"
+def get_history(start= None, end= None, msv: str = "") -> pd.DataFrame:
     try:
         msv = str(msv or "").strip().upper()
-
         docs = db.collection("logs").stream()
-
         rows: list[dict] = []
         for doc in docs:
             data = doc.to_dict() or {}
-
             log_id = str(doc.id).strip().upper()
             msv_val = str(data.get("id", "") or "").strip().upper()
-
             rows.append(
                 {
                     "log_id": log_id,
@@ -280,7 +229,6 @@ def get_history(start: Optional[date] = None, end: Optional[date] = None, msv: s
         if msv:
             df = df[df["msv"].astype(str).str.upper() == msv]
 
-
         if start is not None:
             start_dt = datetime.combine(start, datetime.min.time())
             df = df[df["time"] >= start_dt]
@@ -298,13 +246,8 @@ def get_history(start: Optional[date] = None, end: Optional[date] = None, msv: s
         logger.exception("get_history() error")
         return pd.DataFrame(columns=["log_id", "msv", "name", "class", "phone_number", "time"])
 
-"""Thống kê tổng quát + theo ngày gần nhất từ collection `logs`.
-
-Chỉ dùng các field có trong tab lịch sử: id/msv, time.
-(Phần status/note đã bỏ theo yêu cầu.)
-"""
-
-def get_stats() -> Dict[str, object]:
+# Lấy dữ liệu thống kê
+def get_stats() -> dict[str, object]:
     try:
         docs = db.collection("logs").stream()
         rows: list[dict] = []
@@ -316,7 +259,6 @@ def get_stats() -> Dict[str, object]:
                     "time": data.get("time", ""),
                 }
             )
-
 
         df = pd.DataFrame(rows)
         if df.empty:
