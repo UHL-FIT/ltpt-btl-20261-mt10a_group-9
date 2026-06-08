@@ -260,8 +260,14 @@ def create_main_window() -> tuple[ctk.CTk, dict[str, object]]:
     cols = ["msv", "name", "class", "phone_number", "time"]
 
     ui["tree_history"] = ttk.Treeview(history_table, columns=cols, show="headings", height=18)
-    ui["tree_history"].pack(fill="both", expand=True)
 
+    # Tạo Scrollbar cho bảng lịch sử
+    scrollbar_y = ttk.Scrollbar(history_table, orient="vertical", command=ui["tree_history"].yview)
+    ui["tree_history"].configure(yscrollcommand=scrollbar_y.set)
+    scrollbar_y.pack(side="right", fill="y")
+
+    ui["tree_history"].pack(side="left", fill="both", expand=True)
+    
     # Set độ rộng theo cột
     col_width = {
         "msv": 120,
