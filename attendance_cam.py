@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 import face_recognition
 from models import face_attendance
-
+from typing import List, Dict, Tuple, Optional
 def get_base_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -169,13 +169,23 @@ def main():
 
             flipped_frame = cv.flip(frame, 1)
 
-            # Hiển thị trạng thái
+            # Hiển thị trạng thái và phím tắt
+            cv.putText(
+                flipped_frame,
+                "Nhan q de tat cam",
+                (10, 30),
+                cv.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 0, 255),
+                2,
+                cv.LINE_AA,
+            )
             cv.putText(
                 flipped_frame,
                 "Dang nhan dien...",
-                (20, 40),
+                (10, 60),
                 cv.FONT_HERSHEY_SIMPLEX,
-                1.0,
+                0.7,
                 (0, 255, 255),
                 2,
                 cv.LINE_AA,

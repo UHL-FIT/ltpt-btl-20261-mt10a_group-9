@@ -331,10 +331,11 @@ def chay_ung_dung() -> None:
                     messagebox.showerror("Lỗi", str(err))
 
                 # Stop camera only after user acknowledges popup
-                try:
-                    proc.terminate()
-                except Exception:
-                    pass
+                # Lần này người dùng yêu cầu KHÔNG tắt cam, để cam vẫn tiếp tục chạy
+                # try:
+                #     proc.terminate()
+                # except Exception:
+                #     pass
 
                 try:
                     os.remove(last_json_path)
@@ -395,10 +396,10 @@ def chay_ung_dung() -> None:
         text_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
         text_frame.pack(side="left", fill="both", expand=True)
 
-        ctk.CTkLabel(text_frame, text="PHẦN MỀM: SMARTATTEND", font=ctk.CTkFont(size=14, weight="bold"), anchor="w").pack(fill="x")
+        ctk.CTkLabel(text_frame, text="PHẦN MỀM: FaceAttend", font=ctk.CTkFont(size=14, weight="bold"), anchor="w").pack(fill="x")
         ctk.CTkLabel(text_frame, text="---------------------------------------------------", text_color="gray", anchor="w").pack(fill="x", pady=2)
         ctk.CTkLabel(text_frame, text="• Phiên bản: 1.0.0", anchor="w").pack(fill="x")
-        ctk.CTkLabel(text_frame, text="• Tác giả: ThS. Vũ Duy Sơn", anchor="w").pack(fill="x")
+        ctk.CTkLabel(text_frame, text="• Tác giả: Group 9 - DH10_MT10A", anchor="w").pack(fill="x")
         ctk.CTkLabel(text_frame, text="• Đơn vị: Trường Đại học Hạ Long (UHL)", anchor="w").pack(fill="x")
         ctk.CTkLabel(text_frame, text="• Ngày phát hành: 03/05/2026", anchor="w").pack(fill="x")
         ctk.CTkLabel(text_frame, text="---------------------------------------------------", text_color="gray", anchor="w").pack(fill="x", pady=2)
