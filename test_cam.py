@@ -28,12 +28,13 @@ def main():
     cam = cv.VideoCapture(args.camera_index, cv.CAP_DSHOW)
     cam.set(cv.CAP_PROP_FRAME_WIDTH, 640)
     cam.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
+    cam.set(cv.CAP_PROP_BUFFERSIZE, 1)  # giảm latency: không buffer frame cũ
 
     # Biến phục vụ việc giảm tải cho CPU (Bỏ khung hình)
     frame_count = 0
     face_locations = []
     last_detected = []
-    detect_every_n = 3  # giảm tải CPU để preview mượt hơn
+    detect_every_n = 5  # detect mỗi 5 frame: giảm CPU, camera mượt hơn
 
     try:
         if not cam.isOpened():
@@ -48,12 +49,19 @@ def main():
                 
                 # Lật ảnh cho giống soi gương
                 flipped_frame = cv.flip(frame, 1)
-                display_frame = flipped_frame.copy()
+                display_frame = flipped_frame  # không cần .copy() vì chỉ đọc
 
                 # Giảm tải: chỉ detect mặt mỗi N frame, các frame còn lại dùng kết quả cũ
                 if frame_count % detect_every_n == 0:
                     rgb_frame = cv.cvtColor(display_frame, cv.COLOR_BGR2RGB)
-                    face_locations = face_recognition.face_locations(rgb_frame)
+                    # Resize xuống 1/4 trước khi detect -> tăng tốc 4-16 lần
+                    small_rgb = cv.resize(rgb_frame, (0, 0), fx=0.25, fy=0.25)
+                    small_locations = face_recognition.face_locations(small_rgb)
+                    # Scale tọa độ ngược lại về kích thước frame gốc
+                    face_locations = [
+                        (top * 4, right * 4, bottom * 4, left * 4)
+                        for (top, right, bottom, left) in small_locations
+                    ]
                     if face_locations:
                         last_detected = face_locations
 

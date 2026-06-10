@@ -92,10 +92,10 @@ def refresh_stats(ui) -> None:
             pass
 
 def chay_ung_dung() -> None:
-    # Gọi hàm vẽ giao diện UI
+    # Gọi View vẽ giao diện UI
     root, ui = ctk_view.create_main_window()
 
-    # ---------- Initial load ----------
+    # ---------- Load dữ liệu khi chạy chương trình cho History và Stats ----------
     load_history(ui)
     refresh_stats(ui)
 
@@ -135,7 +135,7 @@ def chay_ung_dung() -> None:
             set_label(ui, "lbl_reg_status", f"Trạng thái: lỗi - {msg}")
             return
 
-        messagebox.showinfo("Thành công", msg)
+        messagebox.showinfo("Lưu thông tin thành công! Hãy đăng kí khuôn mặt!", msg)
         set_label(ui, "lbl_reg_status", f"Trạng thái: OK - {msg}")
 
     # Button đăng kí khuôn mặt 
@@ -351,11 +351,9 @@ def chay_ung_dung() -> None:
 
         poll_once()
 
-    # Button Hướng dẫn
+    # Button mở file pdf HDSD phần mềm 
     def on_help() -> None:
         try:
-            import os
-            import sys
             # Đường dẫn file hướng dẫn nằm cùng cấp với main.py
             root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             help_path = os.path.join(root_dir, "HDSD.pdf")
@@ -517,7 +515,7 @@ def chay_ung_dung() -> None:
                     parent=export_win,
                     defaultextension=default_ext,
                     filetypes=filetypes,
-                    initialfile=f"lich-su-cham-cong{default_ext}",
+                    initialfile=f"lich_su_cham_cong{default_ext}",
                     title="Chọn nơi lưu báo cáo",
                 )
                 if not save_path:
@@ -527,7 +525,7 @@ def chay_ung_dung() -> None:
 
             btn_browse = ctk.CTkButton(
                 path_row,
-                text="Duyệt...",
+                text="Browse",
                 width=80,
                 fg_color="#3b82f6",
                 hover_color="#2563eb",
@@ -630,29 +628,26 @@ def chay_ung_dung() -> None:
     # Button lưu khuôn mặt đăng kí
     ui["btn_register_face"].configure(command=on_register_face)
 
+     # Button xóa sinh viên
+    ui["btn_delete_student"].configure(command=on_delete_student)
+
     # Button làm mới dữ liệu thống kê
     ui["btn_refresh_stats"].configure(command=on_refresh_stats)
 
-    # Button xóa sinh viên
-    ui["btn_delete_student"].configure(command=on_delete_student)
-
     # Button Hướng dẫn
-    if "btn_help" in ui:
-        ui["btn_help"].configure(command=on_help)
+    ui["btn_help"].configure(command=on_help)
+
+    # Button Giới thiệu
+    ui["btn_about"].configure(command=on_about)
 
     # Button làm mới bảng lịch sử chấm công
     ui["btn_hist_refresh"].configure(command=on_hist_refresh)
-
 
     # Button lọc bảng lịch sử chấm công theo mã sinh viên
     ui["btn_hist_filter"].configure(command=on_hist_filter)
 
     # Button xuất báo cáo
     ui["btn_export_report"].configure(command=on_export_report)
-
-    # Button Giới thiệu
-    if "btn_about" in ui:
-        ui["btn_about"].configure(command=on_about)
 
     root.mainloop()
 

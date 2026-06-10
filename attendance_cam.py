@@ -143,6 +143,9 @@ def main():
     already_marked_today = _load_already_marked_today()
 
     cam = cv.VideoCapture(0, cv.CAP_DSHOW)
+    cam.set(cv.CAP_PROP_FRAME_WIDTH, 640)
+    cam.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
+    cam.set(cv.CAP_PROP_BUFFERSIZE, 1)  # giảm latency: không buffer frame cũ
     try:
         if not cam.isOpened():
             # báo lỗi lên JSON để UI biết (không crash)
@@ -156,7 +159,7 @@ def main():
         last_face_seen_time = 0.0
 
         # Giảm tải detect/encode để camera mượt hơn
-        detect_every_n = 3
+        detect_every_n = 5  # detect mỗi 5 frame: giảm CPU, camera mượt hơn
         frame_count = 0
 
         last_face_locations = []
@@ -195,7 +198,16 @@ def main():
 
             # Giảm tải: chỉ detect/encode mỗi N frame, còn lại dùng kết quả cũ
             if frame_count % detect_every_n == 0:
-                face_locations = face_recognition.face_locations(rgb)
+                # Resize xuống 1/4 trước khi detect -> tăng tốc 4-16 lần
+                small_rgb = cv.resize(rgb, (0, 0), fx=0.25, fy=0.25)
+                small_locations = face_recognition.face_locations(small_rgb)
+
+                # Scale tọa độ ngược lại về kích thước frame gốc
+                face_locations = [
+                    (top * 4, right * 4, bottom * 4, left * 4)
+                    for (top, right, bottom, left) in small_locations
+                ]
+                # Encode trên frame gốc (full-res) để giữ độ chính xác nhận diện
                 encodings = face_recognition.face_encodings(rgb, face_locations)
 
                 if face_locations:

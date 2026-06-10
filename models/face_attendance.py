@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, date
+from datetime import datetime
 import pandas as pd
 from utils.logger import setup_logger
 import firebase_admin
@@ -53,7 +53,7 @@ def load_students() -> pd.DataFrame:
         df["msv"] = df["msv"].astype(str).str.strip().str.upper()
         return df
     
-    except Exception as e:
+    except Exception:
         logger.exception("load_students() firestore error")
         return pd.DataFrame(columns=["msv", "ho_ten", "lop", "sdt", "face_path"])
 
@@ -156,19 +156,8 @@ def register_face(msv: str, face_path: str = "") -> tuple[bool, str]:
     ok, msg = update_student(msv, {"face_path": face_path})
     return ok, msg
 
-# Thêm dòng log vào Firestore collection "logs"
+# Thêm bản ghi vào Firestore collection "logs"
 def do_attendance(msv: str, status: str = "OK", note: str = "") -> tuple[bool, str]:
-    """Ghi 1 bản ghi chấm công vào collection `logs`.
-
-    Đồng bộ với tab Lịch sử mong muốn (không hiển thị status/note):
-    - id: (doc id ngẫu nhiên)
-    - name, class, phone_number lấy từ collection `register`.
-    - time lấy thời điểm hiện tại.
-
-    Lưu ý:
-    - Hàm vẫn giữ tham số status/note để không làm hỏng các chỗ gọi cũ,
-      nhưng sẽ KHÔNG ghi chúng vào `logs`.
-    """
     msv = str(msv).strip().upper()
     if not msv:
         return False, "MSV không hợp lệ"

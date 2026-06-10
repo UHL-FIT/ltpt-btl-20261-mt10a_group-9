@@ -1,9 +1,5 @@
-from __future__ import annotations
-
 import customtkinter as ctk
 from tkinter import Frame
-from typing import Dict, Optional
-
 
 def _clear_container(container: ctk.CTkFrame) -> None:
     for child in list(container.winfo_children()):
@@ -12,15 +8,12 @@ def _clear_container(container: ctk.CTkFrame) -> None:
         except Exception:
             pass
 
-
 class StatsView:
-    """UI container for stats page including 2 charts."""
-
     def __init__(self, parent: ctk.CTkFrame):
         self.parent = parent
-        self.chart_bar_container: Optional[ctk.CTkFrame] = None
-        self.chart_pie_container: Optional[ctk.CTkFrame] = None
-        self.kpi_labels: Dict[str, ctk.CTkLabel] = {}
+        self.chart_bar_container = None
+        self.chart_pie_container = None
+        self.kpi_labels: dict[str, ctk.CTkLabel] = {}
         self._build()
 
     def _build(self) -> None:
