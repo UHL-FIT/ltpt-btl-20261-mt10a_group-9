@@ -1,5 +1,7 @@
 import sys
 import os
+import pathlib
+import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from utils.logger import setup_logger
@@ -7,6 +9,38 @@ from models import face_attendance
 import views.ctk_view as ctk_view
 
 logger = setup_logger("ctk_controller")
+
+def show_cam_loading(root, message: str = "Đang khởi động camera..."):
+    win = ctk.CTkToplevel(root)
+    win.title("Vui lòng chờ")
+    win.geometry("340x140")
+    win.resizable(False, False)
+    win.transient(root)
+    win.grab_set()
+    win.protocol("WM_DELETE_WINDOW", lambda: None)  # Không cho đóng tay
+
+    frame = ctk.CTkFrame(win, corner_radius=12)
+    frame.pack(fill="both", expand=True, padx=16, pady=16)
+
+    ctk.CTkLabel(
+        frame,
+        text="⏳  " + message,
+        font=ctk.CTkFont(size=14, weight="bold"),
+        wraplength=290,
+        justify="center",
+    ).pack(expand=True, pady=(18, 6))
+
+    ctk.CTkLabel(
+        frame,
+        text="Cửa sổ camera sẽ tự xuất hiện khi sẵn sàng.",
+        font=ctk.CTkFont(size=11),
+        text_color="gray",
+        wraplength=290,
+        justify="center",
+    ).pack(pady=(0, 12))
+
+    win.update()
+    return win
 
 def set_label(ui: dict, key: str, txt: str) -> None:
     label = ui.get(key)
@@ -138,11 +172,9 @@ def chay_ung_dung() -> None:
         messagebox.showinfo("Lưu thông tin thành công! Hãy đăng kí khuôn mặt!", msg)
         set_label(ui, "lbl_reg_status", f"Trạng thái: OK - {msg}")
 
-    # Button đăng kí khuôn mặt 
+    # Button đăng kí khuôn mặt
     def on_register_face() -> None:
         import subprocess
-        import os
-        import sys
 
         msv = ui["ent_reg_msv"].get().strip().upper()
         name = ui["ent_reg_name"].get().strip()
@@ -161,44 +193,102 @@ def chay_ung_dung() -> None:
             )
             return
 
-        dataset_path = os.path.join("dataset", f"{msv}.jpg")
-
-        # script_path: test_cam.py ở cùng root dự án
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test_cam.py"))
         if not os.path.exists(script_path):
             messagebox.showerror("Lỗi", f"Không tìm thấy file camera: {script_path}")
             return
 
-        # Chạy camera standalone và chờ người dùng bấm 's' để lưu ảnh rồi mới tiếp tục
+        dataset_path = os.path.join("dataset", f"{msv}.jpg")
+
+        # Xóa flag cũ (nếu còn sót) trước khi spawn
+        repo_root = pathlib.Path(script_path).parent
+        ready_flag = repo_root / "data" / "cam_register_ready.flag"
         try:
-            proc = subprocess.run(
-                [sys.executable, script_path, "--msv", msv],
-                capture_output=True,
-                text=True,
-            )
+            ready_flag.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        # ── onPreExecute: hiện màn hình chờ ──────────────────────────────
+        loading_win = show_cam_loading(root, "Đang khởi động camera đăng ký...")
+
+        # ── doInBackground: chạy camera subprocess riêng ─────────────────
+        try:
+            proc = subprocess.Popen([sys.executable, script_path, "--msv", msv])
         except Exception as e:
+            try:
+                loading_win.destroy()
+            except Exception:
+                pass
             messagebox.showerror("Lỗi", f"Không thể chạy camera: {e}")
             return
 
-        if not os.path.exists(dataset_path):
-            err_msg = (proc.stderr or proc.stdout or "").strip() or "Camera chạy nhưng không tạo được ảnh"
-            messagebox.showerror("Không tạo được ảnh", f"{err_msg}\nExpected: {dataset_path}")
-            return
+        # ── Polling: chờ tín hiệu sẵn sàng từ subprocess ────────────────
+        def wait_for_cam_ready():
+            """Tương đương onProgressUpdate — kiểm tra flag file mỗi 200ms."""
+            if proc.poll() is not None:
+                # Subprocess kết thúc trước khi ready → đóng popup
+                try:
+                    loading_win.destroy()
+                except Exception:
+                    pass
+                # Kiểm tra kết quả
+                if os.path.exists(dataset_path):
+                    ok, msg = face_attendance.register_face(msv, face_path=dataset_path)
+                    if ok:
+                        set_label(ui, "lbl_reg_status", "Trạng thái: OK - đã đăng ký khuôn mặt")
+                        messagebox.showinfo("Thành công", msg)
+                        ui["ent_reg_msv"].delete(0, tk.END)
+                        ui["ent_reg_name"].delete(0, tk.END)
+                        ui["ent_reg_lop"].delete(0, tk.END)
+                        ui["ent_reg_sdt"].delete(0, tk.END)
+                        set_label(ui, "lbl_reg_status", "Trạng thái: sẵn sàng")
+                    else:
+                        messagebox.showerror("Lỗi", msg)
+                return
 
-        ok, msg = face_attendance.register_face(msv, face_path=dataset_path)
-        if not ok:
-            messagebox.showerror("Lỗi", msg)
-            return
+            if ready_flag.exists():
+                # ── onPostExecute (giai đoạn 1): camera đã mở → đóng popup ──
+                try:
+                    loading_win.destroy()
+                except Exception:
+                    pass
+                # Tiếp tục polling chờ người dùng bấm 's' lưu ảnh
+                wait_for_image_saved()
+                return
 
-        set_label(ui, "lbl_reg_status", f"Trạng thái: OK - đã đăng ký khuôn mặt")
-        messagebox.showinfo("Thành công", msg)
+            # Chưa ready → polling tiếp
+            try:
+                root.after(200, wait_for_cam_ready)
+            except Exception:
+                pass
 
-        # Reset các ô nhập thông tin đăng ký sau khi người dùng bấm OK
-        ui["ent_reg_msv"].delete(0, tk.END)
-        ui["ent_reg_name"].delete(0, tk.END)
-        ui["ent_reg_lop"].delete(0, tk.END)
-        ui["ent_reg_sdt"].delete(0, tk.END)
-        set_label(ui, "lbl_reg_status", "Trạng thái: sẵn sàng")
+        def wait_for_image_saved():
+            """Sau khi cam mở: chờ subprocess kết thúc (người dùng bấm 's' hoặc 'q')."""
+            if proc.poll() is None:
+                try:
+                    root.after(300, wait_for_image_saved)
+                except Exception:
+                    pass
+                return
+
+            # ── onPostExecute (giai đoạn 2): subprocess đã kết thúc ──────
+            if os.path.exists(dataset_path):
+                ok, msg = face_attendance.register_face(msv, face_path=dataset_path)
+                if ok:
+                    set_label(ui, "lbl_reg_status", "Trạng thái: OK - đã đăng ký khuôn mặt")
+                    messagebox.showinfo("Thành công", msg)
+                    ui["ent_reg_msv"].delete(0, tk.END)
+                    ui["ent_reg_name"].delete(0, tk.END)
+                    ui["ent_reg_lop"].delete(0, tk.END)
+                    ui["ent_reg_sdt"].delete(0, tk.END)
+                    set_label(ui, "lbl_reg_status", "Trạng thái: sẵn sàng")
+                else:
+                    messagebox.showerror("Lỗi", msg)
+            else:
+                messagebox.showwarning("Không có ảnh", "Camera đã đóng nhưng không lưu được ảnh.\nBạn chưa bấm 's' hoặc không có khuôn mặt.")
+
+        wait_for_cam_ready()
+
 
     # Button xóa sinh viên
     def on_delete_student() -> None:
@@ -262,7 +352,6 @@ def chay_ung_dung() -> None:
     # Button chấm công
     def on_start_attendance() -> None:
         import subprocess
-        import os
         import json
 
         # Reset khung bên phải ngay khi bắt đầu lượt chấm công
@@ -286,16 +375,50 @@ def chay_ung_dung() -> None:
         except Exception:
             pass
 
-        # Spawn camera subprocess dùng đúng interpreter (tránh lệch venv)
+        # Xóa flag cũ 
+        ready_flag = pathlib.Path(repo_root) / "data" / "cam_attendance_ready.flag"
+        try:
+            ready_flag.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+       # Hiện màn hình chờ
+        loading_win = show_cam_loading(root, "Đang khởi động camera chấm công...")
+
+        # Chạy subprocess riêng
         proc = subprocess.Popen([sys.executable, script_path])
 
         polling_interval_ms = 250
 
-        def poll_once():
-            # If user closes process/window manually
+        # ── Polling 1: chờ tín hiệu camera sẵn sàng ─────────────────────
+        def wait_for_cam_ready():
+            if proc.poll() is not None:
+                # Subprocess kết thúc sớm (lỗi mở cam)
+                try:
+                    loading_win.destroy()
+                except Exception:
+                    pass
+                return
+
+            if ready_flag.exists():
+                # ── onPostExecute (giai đoạn 1): đóng popup loading ──────
+                try:
+                    loading_win.destroy()
+                except Exception:
+                    pass
+                # Bắt đầu polling kết quả chấm công
+                poll_attendance_result()
+                return
+
+            try:
+                root.after(200, wait_for_cam_ready)
+            except Exception:
+                pass
+
+        # ── Polling 2: chờ kết quả chấm công từ JSON ────────────────────
+        def poll_attendance_result():
             try:
                 if proc.poll() is not None:
-                    # Camera process ended; still allow UI to reset if needed
                     return
             except Exception:
                 return
@@ -311,31 +434,25 @@ def chay_ung_dung() -> None:
             if payload and str(payload.get("status", "")).strip():
                 st = str(payload.get("status", "")).strip().upper()
 
-                msv = str(payload.get("msv", "")).strip().upper()
+                msv    = str(payload.get("msv", "")).strip().upper()
                 ho_ten = str(payload.get("ho_ten", "")).strip()
-                lop = str(payload.get("lop", "")).strip()
-                sdt = str(payload.get("sdt", "")).strip()
-                t_str = str(payload.get("time", "")).strip()
+                lop    = str(payload.get("lop", "")).strip()
+                sdt    = str(payload.get("sdt", "")).strip()
+                t_str  = str(payload.get("time", "")).strip()
 
-                if msv: set_label(ui, "lbl_msv", msv)
-                if ho_ten: set_label(ui, "lbl_hoten", ho_ten)
-                if lop: set_label(ui, "lbl_lop", lop)                   
-                if sdt: set_label(ui, "lbl_sdt", sdt)
-                if t_str: set_label(ui, "lbl_thoigian", t_str)
-                    
-                if st == "SUCCESS": messagebox.showinfo("Thông báo", "Chấm công thành công!")
-                elif st == "ALREADY_MARKED_TODAY": messagebox.showinfo("Thông báo", "Đã chấm công hôm nay!")
+                if msv:    set_label(ui, "lbl_msv",     msv)
+                if ho_ten: set_label(ui, "lbl_hoten",   ho_ten)
+                if lop:    set_label(ui, "lbl_lop",     lop)
+                if sdt:    set_label(ui, "lbl_sdt",     sdt)
+                if t_str:  set_label(ui, "lbl_thoigian", t_str)
+
+                if st == "SUCCESS":
+                    messagebox.showinfo("Thông báo", "Chấm công thành công!")
+                elif st == "ALREADY_MARKED_TODAY":
+                    messagebox.showinfo("Thông báo", "Đã chấm công hôm nay!")
                 else:
-                    # Includes ERROR or UNKNOWN
                     err = payload.get("error") or payload.get("message") or "Nhận diện thất bại"
                     messagebox.showerror("Lỗi", str(err))
-
-                # Stop camera only after user acknowledges popup
-                # Lần này người dùng yêu cầu KHÔNG tắt cam, để cam vẫn tiếp tục chạy
-                # try:
-                #     proc.terminate()
-                # except Exception:
-                #     pass
 
                 try:
                     os.remove(last_json_path)
@@ -343,13 +460,14 @@ def chay_ung_dung() -> None:
                     pass
                 return
 
-            # continue polling
+            # Chưa có kết quả → tiếp tục polling
             try:
-                root.after(polling_interval_ms, poll_once)
+                root.after(polling_interval_ms, poll_attendance_result)
             except Exception:
                 pass
 
-        poll_once()
+        wait_for_cam_ready()
+
 
     # Button mở file pdf HDSD phần mềm 
     def on_help() -> None:

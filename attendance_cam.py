@@ -2,10 +2,12 @@ import cv2 as cv
 import os
 import json
 import time
+import pathlib
 from datetime import datetime
 import face_recognition
 from models import face_attendance
 from typing import List, Dict, Tuple, Optional
+
 def get_base_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -142,6 +144,9 @@ def main():
     known_encodings, known_msws, student_info = _compute_embeddings_from_students()
     already_marked_today = _load_already_marked_today()
 
+    # Tín hiệu sẵn sàng gửi về UI
+    ready_flag = pathlib.Path(BASE_DIR) / "data" / "cam_attendance_ready.flag"
+
     cam = cv.VideoCapture(0, cv.CAP_DSHOW)
     cam.set(cv.CAP_PROP_FRAME_WIDTH, 640)
     cam.set(cv.CAP_PROP_FRAME_HEIGHT, 480)
@@ -155,11 +160,14 @@ def main():
             )
             return
 
+        # --- Bắn tín hiệu về UI: camera đã sẵn sàng ---
+        ready_flag.touch()
+
         wrote_result = False
         last_face_seen_time = 0.0
 
         # Giảm tải detect/encode để camera mượt hơn
-        detect_every_n = 5  # detect mỗi 5 frame: giảm CPU, camera mượt hơn
+        detect_every_n = 5  # detect mỗi 5 frame
         frame_count = 0
 
         last_face_locations = []
@@ -310,6 +318,11 @@ def main():
             pass
         try:
             cv.destroyAllWindows()
+        except Exception:
+            pass
+        # Xóa flag nếu còn (tránh lần sau nhận nhầm)
+        try:
+            ready_flag.unlink(missing_ok=True)
         except Exception:
             pass
 

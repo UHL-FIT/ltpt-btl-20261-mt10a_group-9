@@ -3,6 +3,7 @@ import face_recognition
 import os
 import argparse
 import sys
+import pathlib
 
 def ensure_dataset_dir(dataset_dir: str) -> None:
     if not os.path.exists(dataset_dir):
@@ -36,10 +37,17 @@ def main():
     last_detected = []
     detect_every_n = 5  # detect mỗi 5 frame: giảm CPU, camera mượt hơn
 
+    # Đường dẫn file tín hiệu ready (cùng thư mục data/ với attendance)
+    repo_root = pathlib.Path(__file__).parent
+    ready_flag = repo_root / "data" / "cam_register_ready.flag"
+    ready_flag.parent.mkdir(exist_ok=True)
+
     try:
         if not cam.isOpened():
             print('Loi: Khong the mo cam!')
         else:
+            # --- Bắn tín hiệu về UI: camera đã sẵn sàng ---
+            ready_flag.touch()
             print('Camera da san sang!')
             while True:
                 res, frame = cam.read()
@@ -106,6 +114,11 @@ def main():
     finally:
         cam.release()
         cv.destroyAllWindows()
+        # Xóa flag nếu còn (tránh lần sau nhận nhầm)
+        try:
+            ready_flag.unlink(missing_ok=True)
+        except Exception:
+            pass
         print('He thong da don dep va dong an toan!')
 
 if __name__ == "__main__":
